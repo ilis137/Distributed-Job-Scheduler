@@ -85,10 +85,11 @@ A highly available, fault-tolerant distributed job scheduling system demonstrati
 | Feature | Status | Documentation | Code Location | Completed |
 |---------|--------|---------------|---------------|-----------|
 | Project Structure & Build Setup | ✅ COMPLETE | [docs/features/PROJECT_SETUP.md](./docs/features/PROJECT_SETUP.md) | Root | 2026-03-07 |
-| Database Schema Design | ⏸️ TODO | [docs/features/DATABASE_SCHEMA.md](./docs/features/DATABASE_SCHEMA.md) | `src/main/resources/db/changelog/` | - |
-| Core Domain Entities | ⏸️ TODO | [docs/features/DOMAIN_MODEL.md](./docs/features/DOMAIN_MODEL.md) | `src/main/java/com/scheduler/domain/` | - |
-| JPA Repositories | ⏸️ TODO | [docs/features/DATA_ACCESS.md](./docs/features/DATA_ACCESS.md) | `src/main/java/com/scheduler/repository/` | - |
-| Basic Configuration | ⏸️ TODO | [docs/features/CONFIGURATION.md](./docs/features/CONFIGURATION.md) | `src/main/resources/` | - |
+| Database Schema Design | ✅ COMPLETE | [docs/FLYWAY_MIGRATION_SUMMARY.md](./docs/FLYWAY_MIGRATION_SUMMARY.md) | `src/main/resources/db/migration/` | 2026-03-07 |
+| Flyway Migration & Schema Validation Fix | ✅ COMPLETE | [docs/HIBERNATE_ENUM_VALIDATION_FIX.md](./docs/HIBERNATE_ENUM_VALIDATION_FIX.md) | `src/main/resources/` | 2026-03-07 |
+| Core Domain Entities | ✅ COMPLETE | [docs/WEEK1_SUMMARY.md](./docs/WEEK1_SUMMARY.md) | `src/main/java/com/scheduler/domain/` | 2026-03-07 |
+| JPA Repositories | ✅ COMPLETE | [docs/WEEK1_SUMMARY.md](./docs/WEEK1_SUMMARY.md) | `src/main/java/com/scheduler/repository/` | 2026-03-07 |
+| Basic Configuration | ✅ COMPLETE | [docs/YAML_DUPLICATE_KEY_FIX.md](./docs/YAML_DUPLICATE_KEY_FIX.md) | `src/main/resources/` | 2026-03-07 |
 | Job Service Layer | ⏸️ TODO | [docs/features/JOB_SERVICE.md](./docs/features/JOB_SERVICE.md) | `src/main/java/com/scheduler/service/` | - |
 | REST API Controllers | ⏸️ TODO | [docs/features/REST_API.md](./docs/features/REST_API.md) | `src/main/java/com/scheduler/controller/` | - |
 | Single-Node Job Executor | ⏸️ TODO | [docs/features/JOB_EXECUTOR.md](./docs/features/JOB_EXECUTOR.md) | `src/main/java/com/scheduler/executor/` | - |
@@ -429,14 +430,35 @@ Establish the core infrastructure with database schema, domain entities, and bas
 ## Notes & Decisions
 
 ### 2026-03-07: Project Initialization & Week 1 Completion
+
+**Architecture Decisions:**
 - **Decision**: Use Maven over Gradle for better IDE support and familiarity
 - **Decision**: Java 21 for Virtual Threads and modern language features
 - **Decision**: Spring Boot 3.2.3 for latest features and security updates
-- **Decision**: Flyway over Liquibase for simpler SQL-based migrations
+- **Decision**: Interview-Grade architecture (simplified, ~40 classes) over Production-Grade (80+ classes) to focus on distributed systems concepts
 - **Decision**: Redisson over Jedis for advanced Redis features (Redlock, etc.)
 - **Decision**: Defer observability (Prometheus, Grafana, custom metrics) to Phase 4 to focus on core distributed systems functionality first
-- **Decision**: Interview-Grade architecture (simplified, ~40 classes) over Production-Grade (80+ classes) to focus on distributed systems concepts
-- **Completed**: Week 1 - Domain + Database Layer (entities, enums, repositories, Flyway migrations)
+
+**Database & Schema Management:**
+- **Decision**: Migrated from Liquibase to Flyway for simpler SQL-based migrations
+  - Rationale: SQL is more readable, easier to review in version control, industry standard
+  - Created 4 Flyway migrations (V1-V4) for jobs, job_executions, scheduler_nodes tables
+  - See: `docs/FLYWAY_MIGRATION_SUMMARY.md`
+- **Decision**: Use VARCHAR instead of MySQL ENUM for enum columns
+  - Rationale: Database portability, easier migrations, no vendor lock-in
+  - Applies to: `status` columns in `jobs` and `job_executions` tables
+  - See: `docs/HIBERNATE_ENUM_VALIDATION_FIX.md`
+- **Decision**: Set `hibernate.ddl-auto: none` when using Flyway
+  - Rationale: Flyway manages schema, Hibernate should not validate
+  - Prevents conflicts between Hibernate expectations and actual schema
+  - Clean separation of concerns
+
+**Issues Resolved:**
+- Fixed duplicate `spring:` YAML keys in `application-dev.yml` and `application-prod.yml`
+- Fixed Hibernate schema validation error for enum columns (VARCHAR vs ENUM mismatch)
+- Replaced Liquibase references with Flyway in production configuration
+
+**Completed**: Week 1 - Domain + Database Layer (entities, enums, repositories, Flyway migrations)
 
 ### Future Decisions to Make
 - [ ] Choose between H2 and MySQL for integration tests (leaning towards Testcontainers with MySQL)
@@ -495,7 +517,7 @@ For questions or issues during development, refer to:
 
 ---
 
-**Last Updated**: 2026-03-07
+**Last Updated**: 2026-03-07 (Week 1 Complete - Flyway Migration & Schema Fixes)
 **Updated By**: Development Team
 **Next Review**: After Phase 1 completion
 
