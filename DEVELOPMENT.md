@@ -90,6 +90,7 @@ A highly available, fault-tolerant distributed job scheduling system demonstrati
 | Core Domain Entities | ✅ COMPLETE | [docs/WEEK1_SUMMARY.md](./docs/WEEK1_SUMMARY.md) | `src/main/java/com/scheduler/domain/` | 2026-03-07 |
 | JPA Repositories | ✅ COMPLETE | [docs/WEEK1_SUMMARY.md](./docs/WEEK1_SUMMARY.md) | `src/main/java/com/scheduler/repository/` | 2026-03-07 |
 | Basic Configuration | ✅ COMPLETE | [docs/YAML_DUPLICATE_KEY_FIX.md](./docs/YAML_DUPLICATE_KEY_FIX.md) | `src/main/resources/` | 2026-03-07 |
+| Coordination Layer (Week 2) | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
 | Job Service Layer | ⏸️ TODO | [docs/features/JOB_SERVICE.md](./docs/features/JOB_SERVICE.md) | `src/main/java/com/scheduler/service/` | - |
 | REST API Controllers | ⏸️ TODO | [docs/features/REST_API.md](./docs/features/REST_API.md) | `src/main/java/com/scheduler/controller/` | - |
 | Single-Node Job Executor | ⏸️ TODO | [docs/features/JOB_EXECUTOR.md](./docs/features/JOB_EXECUTOR.md) | `src/main/java/com/scheduler/executor/` | - |
@@ -98,11 +99,13 @@ A highly available, fault-tolerant distributed job scheduling system demonstrati
 
 | Feature | Status | Documentation | Code Location | Completed |
 |---------|--------|---------------|---------------|-----------|
-| Redis Configuration | ⏸️ TODO | [docs/features/REDIS_SETUP.md](./docs/features/REDIS_SETUP.md) | `src/main/java/com/scheduler/config/` | - |
-| Leader Election Service | ⏸️ TODO | [docs/features/LEADER_ELECTION.md](./docs/features/LEADER_ELECTION.md) | `src/main/java/com/scheduler/coordination/` | - |
-| Heartbeat Mechanism | ⏸️ TODO | [docs/features/HEARTBEAT.md](./docs/features/HEARTBEAT.md) | `src/main/java/com/scheduler/coordination/` | - |
-| Fencing Token Provider | ⏸️ TODO | [docs/features/FENCING_TOKENS.md](./docs/features/FENCING_TOKENS.md) | `src/main/java/com/scheduler/coordination/` | - |
-| Cluster State Manager | ⏸️ TODO | [docs/features/CLUSTER_STATE.md](./docs/features/CLUSTER_STATE.md) | `src/main/java/com/scheduler/coordination/` | - |
+| Redis Configuration | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/config/` | 2026-03-07 |
+| Coordination Service Abstraction | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
+| Redis Coordination Implementation | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
+| Leader Election Service | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
+| Distributed Lock Service | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
+| Fencing Token Provider | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
+| Heartbeat Service | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
 
 ### Phase 3: Distributed Locking & Job Execution
 
@@ -459,6 +462,57 @@ Establish the core infrastructure with database schema, domain entities, and bas
 - Replaced Liquibase references with Flyway in production configuration
 
 **Completed**: Week 1 - Domain + Database Layer (entities, enums, repositories, Flyway migrations)
+
+### 2026-03-07: Week 2 - Coordination Layer Complete
+
+**Coordination & Distributed Systems:**
+- **Implemented**: Complete coordination layer with 7 components
+  - `SchedulerProperties` - Type-safe configuration binding
+  - `RedisConfig` - Redisson client configuration
+  - `RedisCoordinationService` - Redis implementation of coordination primitives
+  - `LeaderElectionService` - TTL-based leader election with automatic failover
+  - `DistributedLockService` - Redlock-based distributed locking
+  - `FencingTokenProvider` - Epoch-based fencing tokens for split-brain prevention
+  - `HeartbeatService` - Node heartbeat mechanism for failure detection
+  - See: `docs/WEEK2_COORDINATION_LAYER.md`
+
+**Key Design Decisions:**
+- **Decision**: Use Redis (AP system) over Zookeeper (CP system) for coordination
+  - Rationale: Availability > Strong Consistency for job scheduling
+  - Lower latency, simpler to operate, built-in TTL support
+  - Fencing tokens compensate for weaker consistency guarantees
+- **Decision**: TTL-based leases for leader election
+  - Rationale: Automatic failover if leader crashes
+  - Heartbeat renewal at TTL/3 allows for 2 missed heartbeats
+  - Balances fast failover with tolerance for transient network issues
+- **Decision**: Epoch-based fencing tokens
+  - Rationale: Prevents split-brain scenarios
+  - Database validates writes against current epoch
+  - Zombie leaders cannot corrupt state after network partitions
+
+**Post-Implementation Verification:**
+- **Redisson Watchdog Mechanism Verification** (2026-03-07)
+  - Verified watchdog implementation against official Redisson source code
+  - **Key Findings:**
+    - Default `lockWatchdogTimeout` = 30,000ms (30 seconds) - confirmed in `Config.java` line 95
+    - Renewal interval = `lockWatchdogTimeout / 3` = 10,000ms (10 seconds) - confirmed in source code analysis
+    - Watchdog enabled when `leaseTime = -1` - confirmed in `RedissonLock.java` lines 175-180
+    - Lock TTL is automatically renewed every 10 seconds while the lock holder is alive
+  - **Evidence Sources:**
+    - Official Redisson GitHub source code (`Config.java`, `RedissonLock.java`, `RedissonBaseLock.java`)
+    - Official Redisson documentation (redisson.pro)
+    - Official Redisson GitHub Wiki
+    - Technical blog with experimental verification and source code analysis
+  - **Conclusion:** Implementation in `RedisCoordinationService` is correct and follows Redisson's documented behavior
+  - **Reference:** See `docs/REDISSON_WATCHDOG_VERIFICATION.md` for detailed evidence
+
+**Build Status:**
+- ✅ `mvn clean compile` - SUCCESS (18 source files compiled)
+- ✅ All coordination services implemented and compiling
+- ✅ Watchdog mechanism verified against official Redisson source code
+- ✅ Ready for Week 3: Execution Layer
+
+**Completed**: Week 2 - Coordination Layer (leader election, distributed locking, fencing tokens, heartbeats)
 
 ### Future Decisions to Make
 - [ ] Choose between H2 and MySQL for integration tests (leaning towards Testcontainers with MySQL)

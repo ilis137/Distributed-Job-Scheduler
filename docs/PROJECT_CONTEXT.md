@@ -18,9 +18,9 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 
 ## Current Status (2026-03-07)
 
-### ✅ Completed (Week 1)
+### ✅ Completed (Week 1 + Week 2)
 
-**Domain + Database Layer:**
+**Week 1: Domain + Database Layer:**
 - ✅ Project structure with Maven
 - ✅ Core domain entities: `Job`, `JobExecution`, `SchedulerNode`
 - ✅ Enums: `JobStatus`, `ExecutionStatus`, `NodeStatus`
@@ -28,23 +28,33 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - ✅ Flyway migrations (V1-V4) for database schema
 - ✅ Configuration files (application.yml, -dev, -prod, -test)
 
+**Week 2: Coordination Layer:**
+- ✅ `SchedulerProperties` - Type-safe configuration binding
+- ✅ `RedisConfig` - Redisson client configuration
+- ✅ `CoordinationService` interface - Abstraction for coordination primitives
+- ✅ `RedisCoordinationService` - Redis implementation with Redlock
+- ✅ `LeaderElectionService` - TTL-based leader election with automatic failover
+- ✅ `DistributedLockService` - High-level distributed locking API
+- ✅ `FencingTokenProvider` - Epoch-based fencing tokens
+- ✅ `HeartbeatService` - Node heartbeat and failure detection
+
 **Issues Resolved:**
 - ✅ Migrated from Liquibase to Flyway
 - ✅ Fixed duplicate YAML keys in configuration files
 - ✅ Fixed Hibernate schema validation error (VARCHAR vs ENUM)
+- ✅ Fixed leader election lock renewal bug (enabled Redisson watchdog)
 
 ### 🚧 In Progress
 
-**None** - Ready to start Week 2
+**None** - Ready to start Week 3
 
 ### ⏸️ Next Steps
 
-**Week 2: Coordination Layer**
-- Implement `CoordinationService` abstraction
-- Implement `LeaderElectionService` (Redis-based)
-- Implement `DistributedLockService` (Redlock)
-- Implement `FencingTokenProvider` (epoch-based)
-- Implement `HeartbeatService` (failure detection)
+**Week 3: Execution Layer**
+- Implement `JobService` for job management
+- Implement `JobExecutionService` for execution tracking
+- Implement `JobExecutor` with virtual threads
+- Implement `RetryManager` for failed jobs
 
 ---
 
@@ -186,6 +196,16 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - **Issue**: `application-prod.yml` still referenced Liquibase
 - **Fix**: Replaced with Flyway configuration
 - **Date**: 2026-03-07
+
+**4. Leader Election Lock Renewal Bug**
+- **Issue**: `renewLeadership()` didn't extend Redis lock TTL, causing leader churn every ~10s
+- **Fix**: Enabled Redisson's watchdog mechanism (leaseTime=-1) for automatic lock renewal
+- **Verification**: Validated against official Redisson source code and documentation
+  - Confirmed default `lockWatchdogTimeout` = 30 seconds
+  - Confirmed renewal interval = `lockWatchdogTimeout / 3` = 10 seconds
+  - Verified watchdog activation when `leaseTime = -1`
+- **Date**: 2026-03-07
+- **Docs**: `docs/LEADER_ELECTION_WATCHDOG_FIX.md`, `docs/REDISSON_WATCHDOG_VERIFICATION.md`
 
 ### ⚠️ Current Limitations
 
