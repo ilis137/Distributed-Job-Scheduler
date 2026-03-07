@@ -1,0 +1,49 @@
+# Test Profile Configuration
+
+spring:
+  # Database Configuration (Testcontainers)
+  datasource:
+    url: jdbc:tc:mysql:8.0:///scheduler_test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+
+  # JPA Configuration
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    clean-disabled: false  # Allow clean in tests
+
+  # Redis Configuration (will be overridden by Testcontainers)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+# Logging Configuration
+logging:
+  level:
+    com.scheduler: DEBUG
+    org.springframework: INFO
+    org.hibernate: INFO
+    org.testcontainers: INFO
+
+# Scheduler Configuration
+scheduler:
+  node:
+    id: test-node-1
+  leader-election:
+    enabled: true
+    lock-ttl-seconds: 5
+    heartbeat-interval-seconds: 1
+  job-execution:
+    thread-pool-size: 5
+    max-retry-attempts: 2
+

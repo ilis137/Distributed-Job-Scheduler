@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: scheduler-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: scheduler_dev
+      MYSQL_USER: scheduler_user
+      MYSQL_PASSWORD: scheduler_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - scheduler-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7.2-alpine
+    container_name: scheduler-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - scheduler-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus - DISABLED (Phase 4: Observability)
+  # Uncomment when implementing observability features
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: scheduler-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus-data:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #   networks:
+  #     - scheduler-network
+  #   depends_on:
+  #     - scheduler-node-1
+
+  # Grafana - DISABLED (Phase 4: Observability)
+  # Uncomment when implementing observability features
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: scheduler-grafana
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_USERS_ALLOW_SIGN_UP=false
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #   networks:
+  #     - scheduler-network
+  #   depends_on:
+  #     - prometheus
+
+  # Scheduler Node 1 (Leader candidate)
+  scheduler-node-1:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: scheduler-node-1
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/scheduler_dev
+      DB_USERNAME: scheduler_user
+      DB_PASSWORD: scheduler_pass
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      HOSTNAME: scheduler-node-1
+    ports:
+      - "8080:8080"
+    networks:
+      - scheduler-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Scheduler Node 2 (Follower)
+  scheduler-node-2:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: scheduler-node-2
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/scheduler_dev
+      DB_USERNAME: scheduler_user
+      DB_PASSWORD: scheduler_pass
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8081
+      HOSTNAME: scheduler-node-2
+    ports:
+      - "8081:8081"
+    networks:
+      - scheduler-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Scheduler Node 3 (Follower)
+  scheduler-node-3:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: scheduler-node-3
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:mysql://mysql:3306/scheduler_dev
+      DB_USERNAME: scheduler_user
+      DB_PASSWORD: scheduler_pass
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 8082
+      HOSTNAME: scheduler-node-3
+    ports:
+      - "8082:8082"
+    networks:
+      - scheduler-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  scheduler-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  # Observability volumes - disabled until Phase 4
+  # prometheus-data:
+  # grafana-data:
+
