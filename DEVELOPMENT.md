@@ -1,6 +1,7 @@
 # Distributed Job Scheduler - Development Progress Tracker
 
 **Project Start Date**: 2026-03-07
+**Last Updated**: 2026-03-08
 **Current Phase**: Phase 1 - Core Infrastructure
 **Status**: 🚧 IN PROGRESS
 
@@ -91,9 +92,8 @@ A highly available, fault-tolerant distributed job scheduling system demonstrati
 | JPA Repositories | ✅ COMPLETE | [docs/WEEK1_SUMMARY.md](./docs/WEEK1_SUMMARY.md) | `src/main/java/com/scheduler/repository/` | 2026-03-07 |
 | Basic Configuration | ✅ COMPLETE | [docs/YAML_DUPLICATE_KEY_FIX.md](./docs/YAML_DUPLICATE_KEY_FIX.md) | `src/main/resources/` | 2026-03-07 |
 | Coordination Layer (Week 2) | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
-| Job Service Layer | ⏸️ TODO | [docs/features/JOB_SERVICE.md](./docs/features/JOB_SERVICE.md) | `src/main/java/com/scheduler/service/` | - |
+| Execution Layer (Week 3) | ✅ COMPLETE | [docs/WEEK3_EXECUTION_LAYER.md](./docs/WEEK3_EXECUTION_LAYER.md) | `src/main/java/com/scheduler/executor/`, `src/main/java/com/scheduler/service/` | 2026-03-08 |
 | REST API Controllers | ⏸️ TODO | [docs/features/REST_API.md](./docs/features/REST_API.md) | `src/main/java/com/scheduler/controller/` | - |
-| Single-Node Job Executor | ⏸️ TODO | [docs/features/JOB_EXECUTOR.md](./docs/features/JOB_EXECUTOR.md) | `src/main/java/com/scheduler/executor/` | - |
 
 ### Phase 2: Leader Election & Failover
 
@@ -513,6 +513,34 @@ Establish the core infrastructure with database schema, domain entities, and bas
 - ✅ Ready for Week 3: Execution Layer
 
 **Completed**: Week 2 - Coordination Layer (leader election, distributed locking, fencing tokens, heartbeats)
+
+### 2026-03-08: Week 3 Execution Layer Completion & RETRYING Jobs Bug Fix
+
+**Execution Layer Implementation:**
+- ✅ Implemented `JobExecutor` with Java 21 Virtual Threads for high-concurrency job execution
+- ✅ Implemented retry logic with exponential backoff and jitter in `RetryManager`
+- ✅ Implemented leader-only job polling in `JobScheduler`
+- ✅ Implemented fencing token validation to prevent stale/zombie executions
+- ✅ Build Status: `mvn clean compile` - SUCCESS (30 source files compiled)
+
+**Critical Bug Fix - RETRYING Jobs Never Re-Executed:**
+- **Problem**: Jobs in `RETRYING` status were stuck forever because `JobRepository.findDueJobs()` only queried for `status = 'PENDING'`
+- **Root Cause**: The polling query excluded RETRYING jobs, breaking the entire retry mechanism
+- **Solution**: Modified query to `WHERE j.status IN ('PENDING', 'RETRYING')` to include retry jobs
+- **Impact**: Complete retry flow now works end-to-end (FAILED → RETRYING → SCHEDULED → RUNNING → COMPLETED)
+- **Documentation**:
+  - Detailed analysis: `docs/RETRYING_JOBS_BUG_FIX.md`
+  - Visual comparison: `docs/RETRY_FLOW_COMPARISON.md`
+  - Quick reference: `docs/RETRYING_JOBS_FIX_SUMMARY.md`
+- **Key Learning**: State machines need complete transitions - every non-terminal state needs a way to transition out
+
+**Fencing Token Validation:**
+- Implemented safety mechanism to prevent split-brain corruption
+- `JobService` validates leader's epoch before allowing job status transitions
+- Prevents "zombie" nodes from performing stale writes after losing leadership
+- Documentation: `docs/FENCING_TOKEN_VALIDATION.md`
+
+**Completed**: Week 3 - Execution Layer (job execution, retry logic, fencing validation) - 2026-03-08
 
 ### Future Decisions to Make
 - [ ] Choose between H2 and MySQL for integration tests (leaning towards Testcontainers with MySQL)

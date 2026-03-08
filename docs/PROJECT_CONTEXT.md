@@ -1,8 +1,8 @@
 # Distributed Job Scheduler - Project Context & Memory
 
-**Last Updated**: 2026-03-07  
-**Project Status**: Phase 1 - Week 1 Complete ✅  
-**Next Phase**: Week 2 - Coordination Layer
+**Last Updated**: 2026-03-08
+**Project Status**: Phase 1 - Week 3 Complete ✅
+**Next Phase**: Week 4 - REST API Layer
 
 ---
 
@@ -16,9 +16,9 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 
 ---
 
-## Current Status (2026-03-07)
+## Current Status (2026-03-08)
 
-### ✅ Completed (Week 1 + Week 2)
+### ✅ Completed (Week 1 + Week 2 + Week 3)
 
 **Week 1: Domain + Database Layer:**
 - ✅ Project structure with Maven
@@ -38,15 +38,36 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - ✅ `FencingTokenProvider` - Epoch-based fencing tokens
 - ✅ `HeartbeatService` - Node heartbeat and failure detection
 
-**Issues Resolved:**
+**Week 3: Execution Layer:**
+- ✅ `JobExecutor` - Virtual Thread-based job execution engine (10,000+ concurrent jobs)
+- ✅ `RetryManager` - Exponential backoff with jitter (30s, 60s, 120s)
+- ✅ `JobScheduler` - Leader-only job polling (1-second intervals)
+- ✅ `JobService` - Job lifecycle management with fencing token validation
+- ✅ Fencing token validation to prevent stale/zombie executions
+- ✅ Complete retry flow: FAILED → RETRYING → SCHEDULED → RUNNING → COMPLETED
+- ✅ Exception handling: `StaleExecutionException`, `JobExecutionException`, `InvalidJobStateException`
+
+**Critical Bug Fixes:**
+- ✅ **RETRYING Jobs Bug** (2026-03-08):
+  - **Problem**: Jobs in `RETRYING` status were never re-executed
+  - **Root Cause**: `JobRepository.findDueJobs()` query only looked for `status = 'PENDING'`, excluding RETRYING jobs
+  - **Solution**: Changed query to `WHERE j.status IN ('PENDING', 'RETRYING')`
+  - **Impact**: Complete retry flow now works end-to-end
+  - **Documentation**:
+    - `docs/RETRYING_JOBS_BUG_FIX.md` (detailed analysis)
+    - `docs/RETRY_FLOW_COMPARISON.md` (visual comparison)
+    - `docs/RETRYING_JOBS_FIX_SUMMARY.md` (quick reference)
+
+**Other Issues Resolved:**
 - ✅ Migrated from Liquibase to Flyway
 - ✅ Fixed duplicate YAML keys in configuration files
 - ✅ Fixed Hibernate schema validation error (VARCHAR vs ENUM)
 - ✅ Fixed leader election lock renewal bug (enabled Redisson watchdog)
+- ✅ Fixed lock expiration race condition (fencing token validation)
 
 ### 🚧 In Progress
 
-**None** - Ready to start Week 3
+**None** - Ready to start Week 4 (REST API Layer)
 
 ### ⏸️ Next Steps
 

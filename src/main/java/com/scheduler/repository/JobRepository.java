@@ -46,23 +46,35 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     
     /**
      * Finds jobs that are due for execution.
-     * 
+     *
      * This is the CRITICAL query for the scheduler. The leader polls this
      * query every second to find jobs that need execution.
-     * 
+     *
+     * Returns jobs in both PENDING and RETRYING statuses:
+     * - PENDING: New jobs or recurring jobs ready for execution
+     * - RETRYING: Failed jobs waiting for retry after exponential backoff
+     *
+     * The RETRYING status is included to support the retry flow:
+     * 1. Job fails → status = FAILED
+     * 2. Retry scheduled → status = RETRYING, nextRunTime = now + backoff
+     * 3. Backoff expires → this query picks up the job (nextRunTime <= now)
+     * 4. Job re-executes → status = SCHEDULED → RUNNING
+     *
      * Interview Talking Point:
      * "This query is optimized with a composite index on (status, next_run_time).
-     * I limit the results to prevent overwhelming the system if there's a large
-     * backlog. The leader processes jobs in batches, acquiring distributed locks
-     * for each one."
-     * 
+     * I include both PENDING and RETRYING statuses because retry jobs need to be
+     * re-executed after their exponential backoff period expires. The nextRunTime
+     * field prevents immediate retry - jobs only appear in results when their
+     * scheduled retry time is reached. I limit the results to prevent overwhelming
+     * the system if there's a large backlog."
+     *
      * @param now the current time
      * @param limit maximum number of jobs to return
-     * @return list of jobs due for execution
+     * @return list of jobs due for execution (PENDING or RETRYING status)
      */
     @Query("""
         SELECT j FROM Job j
-        WHERE j.status = 'PENDING'
+        WHERE j.status IN ('PENDING', 'RETRYING')
           AND j.enabled = true
           AND j.nextRunTime <= :now
         ORDER BY j.nextRunTime ASC

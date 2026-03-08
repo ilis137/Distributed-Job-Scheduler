@@ -152,15 +152,133 @@ public class FencingTokenProvider {
     
     /**
      * Generates a formatted fencing token string.
-     * 
+     *
      * Format: "epoch{N}-node{ID}"
-     * 
+     *
      * @param nodeId the node ID
      * @param epoch the epoch number
      * @return formatted fencing token
      */
     public String formatFencingToken(String nodeId, long epoch) {
         return String.format("epoch%d-node%s", epoch, nodeId);
+    }
+
+    /**
+     * Validates a fencing token string against the current leader's epoch.
+     *
+     * Extracts the epoch from the token format "epoch{N}-node{ID}" and
+     * compares it with the current leader's epoch.
+     *
+     * Interview Talking Point:
+     * "I validate fencing tokens on every job status update to prevent zombie
+     * executions from corrupting state. Even if a node loses its distributed
+     * lock, it can't update the job status because its fencing token is stale."
+     *
+     * @param fencingToken the fencing token string to validate
+     * @return true if the token matches the current leader's epoch
+     */
+    public boolean isTokenValid(String fencingToken) {
+        if (fencingToken == null || fencingToken.isEmpty()) {
+            log.warn("Cannot validate null or empty fencing token");
+            return false;
+        }
+
+        long epoch = extractEpochFromToken(fencingToken);
+        if (epoch == -1) {
+            log.warn("Invalid fencing token format: {}", fencingToken);
+            return false;
+        }
+
+        return isTokenValid(epoch);
+    }
+
+    /**
+     * Checks if a fencing token string is stale.
+     *
+     * @param fencingToken the fencing token string to check
+     * @return true if the token is from a previous epoch
+     */
+    public boolean isTokenStale(String fencingToken) {
+        if (fencingToken == null || fencingToken.isEmpty()) {
+            return true;
+        }
+
+        long epoch = extractEpochFromToken(fencingToken);
+        if (epoch == -1) {
+            return true;
+        }
+
+        return isTokenStale(epoch);
+    }
+
+    /**
+     * Gets the current valid fencing token as a formatted string.
+     *
+     * @return Optional containing the current fencing token string
+     */
+    public Optional<String> getCurrentFencingTokenString() {
+        try {
+            Optional<SchedulerNode> leader = nodeRepository.findCurrentLeader();
+
+            if (leader.isPresent()) {
+                SchedulerNode leaderNode = leader.get();
+                String token = formatFencingToken(leaderNode.getNodeId(), leaderNode.getEpoch());
+                log.debug("Current fencing token string: {}", token);
+                return Optional.of(token);
+            } else {
+                log.debug("No current leader - no fencing token available");
+                return Optional.empty();
+            }
+        } catch (Exception e) {
+            log.error("Error getting current fencing token string", e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Extracts the epoch number from a fencing token string.
+     *
+     * Format: "epoch{N}-node{ID}"
+     *
+     * @param fencingToken the fencing token string
+     * @return the epoch number, or -1 if invalid format
+     */
+    public long extractEpochFromToken(String fencingToken) {
+        if (fencingToken == null || !fencingToken.startsWith("epoch")) {
+            return -1;
+        }
+        try {
+            int dashIndex = fencingToken.indexOf("-node");
+            if (dashIndex == -1) {
+                return -1;
+            }
+            String epochPart = fencingToken.substring(5, dashIndex);
+            return Long.parseLong(epochPart);
+        } catch (Exception e) {
+            log.error("Error extracting epoch from token: {}", fencingToken, e);
+            return -1;
+        }
+    }
+
+    /**
+     * Extracts the node ID from a fencing token string.
+     *
+     * Format: "epoch{N}-node{ID}"
+     *
+     * @param fencingToken the fencing token string
+     * @return the node ID, or null if invalid format
+     */
+    public String extractNodeIdFromToken(String fencingToken) {
+        if (fencingToken == null || !fencingToken.contains("-node")) {
+            return null;
+        }
+        try {
+            int nodeIndex = fencingToken.indexOf("-node") + 5;
+            return fencingToken.substring(nodeIndex);
+        } catch (Exception e) {
+            log.error("Error extracting node ID from token: {}", fencingToken, e);
+            return null;
+        }
     }
 }
 
