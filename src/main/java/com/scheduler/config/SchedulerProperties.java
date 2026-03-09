@@ -46,7 +46,12 @@ public class SchedulerProperties {
      * Distributed lock configuration.
      */
     private DistributedLock distributedLock = new DistributedLock();
-    
+
+    /**
+     * Orphaned job recovery configuration.
+     */
+    private Recovery recovery = new Recovery();
+
     @Data
     public static class Node {
         /**
@@ -125,19 +130,51 @@ public class SchedulerProperties {
          */
         @Min(1)
         private int lockTtlSeconds = 60;
-        
+
         /**
          * Maximum time to wait for lock acquisition in seconds.
          */
         @Min(0)
         private int waitTimeSeconds = 5;
-        
+
         /**
          * Lease time for locks in seconds.
          * Lock is automatically released after this time.
          */
         @Min(1)
         private int leaseTimeSeconds = 60;
+    }
+
+    @Data
+    public static class Recovery {
+        /**
+         * Whether orphaned job recovery is enabled.
+         */
+        private boolean enabled = true;
+
+        /**
+         * Interval between recovery task executions in seconds.
+         * The recovery task runs every N seconds to check for stuck jobs.
+         */
+        @Min(10)
+        private int intervalSeconds = 60;
+
+        /**
+         * Initial delay before starting recovery task in seconds.
+         * Gives the system time to stabilize after startup.
+         */
+        @Min(0)
+        private int initialDelaySeconds = 30;
+
+        /**
+         * Threshold in minutes for considering a job as stuck.
+         * Jobs in RUNNING status for longer than this are considered orphaned.
+         *
+         * Should be significantly longer than the maximum expected job timeout
+         * to avoid false positives.
+         */
+        @Min(1)
+        private int stuckJobThresholdMinutes = 5;
     }
 }
 

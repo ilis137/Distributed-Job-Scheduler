@@ -43,11 +43,13 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - ✅ `RetryManager` - Exponential backoff with jitter (30s, 60s, 120s)
 - ✅ `JobScheduler` - Leader-only job polling (1-second intervals)
 - ✅ `JobService` - Job lifecycle management with fencing token validation
+- ✅ `OrphanedJobRecoveryService` - Active recovery for stuck jobs (60-second intervals)
 - ✅ Fencing token validation to prevent stale/zombie executions
 - ✅ Complete retry flow: FAILED → RETRYING → SCHEDULED → RUNNING → COMPLETED
+- ✅ Orphaned job recovery: Detects and recovers jobs stuck in RUNNING status
 - ✅ Exception handling: `StaleExecutionException`, `JobExecutionException`, `InvalidJobStateException`
 
-**Critical Bug Fixes:**
+**Critical Bug Fixes & Features:**
 - ✅ **RETRYING Jobs Bug** (2026-03-08):
   - **Problem**: Jobs in `RETRYING` status were never re-executed
   - **Root Cause**: `JobRepository.findDueJobs()` query only looked for `status = 'PENDING'`, excluding RETRYING jobs
@@ -57,6 +59,16 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
     - `docs/RETRYING_JOBS_BUG_FIX.md` (detailed analysis)
     - `docs/RETRY_FLOW_COMPARISON.md` (visual comparison)
     - `docs/RETRYING_JOBS_FIX_SUMMARY.md` (quick reference)
+
+- ✅ **Orphaned Job Recovery** (2026-03-08):
+  - **Problem**: Jobs stuck in RUNNING status when nodes crash were never recovered
+  - **Root Cause**: Lock expiration in Redis doesn't update job status in database
+  - **Solution**: Implemented `OrphanedJobRecoveryService` with scheduled recovery task
+  - **How It Works**: Runs every 60 seconds on leader, finds jobs stuck >5 minutes, marks as FAILED and schedules retries
+  - **Impact**: Automatic recovery of orphaned jobs, no manual intervention needed
+  - **Documentation**:
+    - `docs/ORPHANED_JOB_RECOVERY.md` (implementation guide)
+    - `docs/ORPHANED_JOB_RECOVERY_SUMMARY.md` (quick reference)
 
 **Other Issues Resolved:**
 - ✅ Migrated from Liquibase to Flyway

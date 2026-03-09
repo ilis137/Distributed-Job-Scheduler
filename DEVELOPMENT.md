@@ -540,7 +540,22 @@ Establish the core infrastructure with database schema, domain entities, and bas
 - Prevents "zombie" nodes from performing stale writes after losing leadership
 - Documentation: `docs/FENCING_TOKEN_VALIDATION.md`
 
-**Completed**: Week 3 - Execution Layer (job execution, retry logic, fencing validation) - 2026-03-08
+**Orphaned Job Recovery Implementation:**
+- **Problem**: Jobs stuck in RUNNING status when nodes crash were never recovered
+- **Root Cause**: Lock expiration in Redis doesn't update job status in database
+- **Solution**: Implemented `OrphanedJobRecoveryService` with scheduled recovery task
+- **How It Works**:
+  - Runs every 60 seconds on leader node only
+  - Queries for jobs in RUNNING status for longer than 5 minutes
+  - Marks stuck jobs as FAILED and schedules retries or moves to dead letter queue
+  - Uses deprecated methods (bypasses fencing token validation for recovery)
+- **Configuration**: Fully configurable via `application.yml` (interval, threshold, enabled flag)
+- **Documentation**:
+  - Implementation guide: `docs/ORPHANED_JOB_RECOVERY.md`
+  - Quick reference: `docs/ORPHANED_JOB_RECOVERY_SUMMARY.md`
+- **Key Learning**: Active recovery (periodic scanning) is needed in addition to passive recovery (lock expiration) because lock expiration alone doesn't update database state
+
+**Completed**: Week 3 - Execution Layer (job execution, retry logic, fencing validation, orphaned job recovery) - 2026-03-08
 
 ### Future Decisions to Make
 - [ ] Choose between H2 and MySQL for integration tests (leaning towards Testcontainers with MySQL)

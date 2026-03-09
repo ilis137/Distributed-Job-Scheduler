@@ -110,3 +110,10 @@ scheduler:
     wait-time-seconds: 5
     lease-time-seconds: 60
 
+  # Orphaned job recovery configuration
+  recovery:
+    enabled: true
+    interval-seconds: 60
+    initial-delay-seconds: 30
+    stuck-job-threshold-minutes: 5
+
