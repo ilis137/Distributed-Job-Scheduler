@@ -10,6 +10,8 @@ import com.scheduler.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -149,14 +151,37 @@ public class JobService {
     }
     
     /**
+     * Finds all jobs with pagination.
+     *
+     * @param pageable pagination parameters
+     * @return page of jobs
+     */
+    @Transactional(readOnly = true)
+    public Page<Job> findAll(Pageable pageable) {
+        return jobRepository.findAll(pageable);
+    }
+
+    /**
      * Finds jobs by status.
-     * 
+     *
      * @param status the job status
      * @return list of jobs with the given status
      */
     @Transactional(readOnly = true)
     public List<Job> findByStatus(JobStatus status) {
         return jobRepository.findByStatus(status);
+    }
+
+    /**
+     * Finds jobs by status with pagination.
+     *
+     * @param status the job status
+     * @param pageable pagination parameters
+     * @return page of jobs with the given status
+     */
+    @Transactional(readOnly = true)
+    public Page<Job> findByStatus(JobStatus status, Pageable pageable) {
+        return jobRepository.findByStatus(status, pageable);
     }
     
     /**
@@ -504,6 +529,38 @@ public class JobService {
         }
 
         log.debug("Fencing token validated successfully for job {}: {}", jobId, fencingToken);
+    }
+
+    /**
+     * Pauses a job.
+     *
+     * @param jobId the job ID
+     * @return the paused job
+     * @throws JobNotFoundException if job doesn't exist
+     */
+    @Transactional
+    public Job pauseJob(Long jobId) {
+        Job job = findById(jobId);
+
+        log.info("Pausing job: id={}, name={}", jobId, job.getName());
+
+        return transitionJobStatus(jobId, JobStatus.PAUSED);
+    }
+
+    /**
+     * Resumes a paused job.
+     *
+     * @param jobId the job ID
+     * @return the resumed job
+     * @throws JobNotFoundException if job doesn't exist
+     */
+    @Transactional
+    public Job resumeJob(Long jobId) {
+        Job job = findById(jobId);
+
+        log.info("Resuming job: id={}, name={}", jobId, job.getName());
+
+        return transitionJobStatus(jobId, JobStatus.PENDING);
     }
 }
 

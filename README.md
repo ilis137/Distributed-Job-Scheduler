@@ -1,6 +1,6 @@
 # Distributed Job Scheduler
 
-A highly available, fault-tolerant distributed job scheduling system built with Java 21 and Spring Boot, demonstrating advanced distributed systems concepts for technical interviews.
+A highly available, fault-tolerant distributed job scheduling system built with Java 21 and Spring Boot, demonstrating advanced distributed systems concepts.
 
 ## 🎯 Project Goals
 
@@ -139,7 +139,7 @@ mvn test jacoco:report
 
 ## 🤝 Contributing
 
-This is a portfolio project for technical interviews. Contributions are welcome!
+This is a portfolio project . Contributions are welcome!
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -158,7 +158,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgments
 
 - Inspired by production job schedulers like Quartz, Airflow, and Temporal
-- Built to demonstrate distributed systems expertise for technical interviews
+- Built to demonstrate distributed systems expertise 
 - Designed with production-ready patterns and best practices
 
 ---

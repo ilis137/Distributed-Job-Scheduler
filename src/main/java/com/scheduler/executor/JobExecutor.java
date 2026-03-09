@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Executes jobs in virtual threads with distributed locking.
- * 
+ *
  * Handles the complete job execution lifecycle:
  * 1. Acquire distributed lock
  * 2. Create execution record
@@ -35,14 +35,14 @@ import java.util.concurrent.TimeUnit;
  * 5. Release lock
  * 6. Update job status
  * 7. Schedule retry if needed
- * 
+ *
  * Interview Talking Points:
  * - "I use virtual threads for high concurrency - can handle 10,000+ concurrent jobs"
  * - "Distributed locks prevent duplicate execution across nodes"
  * - "Fencing tokens prevent zombie leaders from corrupting state"
  * - "Timeout handling prevents hung jobs from blocking resources"
  * - "Retry logic with exponential backoff handles transient failures"
- * 
+ *
  * @author Distributed Job Scheduler Team
  * @since 1.0.0
  */
@@ -50,54 +50,54 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 @Slf4j
 public class JobExecutor {
-    
+
     private final JobService jobService;
     private final JobExecutionService executionService;
     private final DistributedLockService lockService;
     private final LeaderElectionService leaderElectionService;
     private final RetryManager retryManager;
-    
+
     @Qualifier("jobExecutorService")
     private final ExecutorService executorService;
-    
+
     /**
      * Executes a job asynchronously in a virtual thread.
-     * 
+     *
      * Interview Talking Point:
      * "I execute jobs asynchronously using CompletableFuture and virtual threads.
      * This allows the scheduler to submit thousands of jobs without blocking.
      * Virtual threads are cheap to create and destroy, so I create one per job."
-     * 
+     *
      * @param job the job to execute
      * @return CompletableFuture that completes when job finishes
      */
     public CompletableFuture<Void> executeAsync(Job job) {
         return CompletableFuture.runAsync(() -> execute(job), executorService);
     }
-    
+
     /**
      * Executes a job synchronously.
-     * 
+     *
      * This is the main execution method that handles the complete lifecycle.
-     * 
+     *
      * @param job the job to execute
      */
     public void execute(Job job) {
         String lockKey = lockService.createJobLockKey(job.getId());
-        
+
         log.info("Attempting to execute job: {} (ID: {})", job.getName(), job.getId());
-        
+
         // Try to acquire distributed lock
         boolean lockAcquired = lockService.tryAcquire(
             lockKey,
             Duration.ofSeconds(job.getTimeoutSeconds() * 2) // Lock TTL = 2x job timeout
         );
-        
+
         if (!lockAcquired) {
             log.debug("Failed to acquire lock for job: {} - another node is executing it", job.getName());
             return;
         }
-        
+
         try {
             // Execute job with lock held
             executeWithLock(job);
@@ -107,7 +107,7 @@ public class JobExecutor {
             log.debug("Released lock for job: {}", job.getName());
         }
     }
-    
+
     /**
      * Executes a job while holding the distributed lock.
      *
@@ -258,13 +258,18 @@ public class JobExecutor {
     /**
      * Handles successful job execution with fencing token validation.
      *
-     * For recurring jobs: resets to PENDING with next run time
+     * For recurring jobs: resets to PENDING with next run time calculated from cron expression
      * For one-time jobs: marks as COMPLETED
      *
      * Interview Talking Point:
      * "I validate the fencing token before updating job status after successful
      * execution. This prevents a zombie execution from marking a job as completed
      * after another node has already taken over and started re-executing it."
+     *
+     * Design Decision:
+     * "For recurring jobs, I parse the cron expression to calculate the next run time.
+     * This ensures jobs execute at their intended schedule (e.g., daily at midnight).
+     * For one-time jobs, I mark them as COMPLETED since they don't need to run again."
      *
      * @param job the job that completed successfully
      * @param fencingToken the fencing token from the execution
@@ -274,11 +279,13 @@ public class JobExecutor {
             if (job.getRecurring()) {
                 log.info("Job {} is recurring - scheduling next execution", job.getName());
 
-                // TODO: Calculate next run time from cron expression
-                // For now, schedule 1 hour from now
-                Instant nextRunTime = Instant.now().plus(Duration.ofHours(1));
+                // Calculate next run time from cron expression
+                Instant nextRunTime = calculateNextRunTimeFromCron(job.getCronExpression());
 
                 jobService.resetToPending(job.getId(), nextRunTime, fencingToken);
+
+                log.info("Recurring job {} scheduled for next execution at {}",
+                    job.getName(), nextRunTime);
             } else {
                 log.info("Job {} is one-time - marking as completed", job.getName());
                 jobService.completeJob(job.getId(), fencingToken);
@@ -384,5 +391,61 @@ public class JobExecutor {
             return 1000; // Default 1 second
         }
     }
+
+
+    /**
+     * Calculates next run time from cron expression.
+     *
+     * Uses Spring's CronExpression to parse and calculate the next occurrence.
+     *
+     * Interview Talking Point:
+     * "I use Spring's CronExpression class for cron parsing because it's built into
+     * Spring Framework 5.3+, avoiding external dependencies like Quartz. It supports
+     * standard cron format and integrates seamlessly with Spring Boot."
+     *
+     * Design Decision:
+     * "If the cron expression is invalid or has no future occurrences, I fall back to
+     * scheduling 1 hour from now. This ensures the job doesn't get stuck and provides
+     * a reasonable default for edge cases."
+     *
+     * @param cronExpression the cron expression
+     * @return the next run time
+     */
+    private Instant calculateNextRunTimeFromCron(String cronExpression) {
+        if (cronExpression == null || cronExpression.isBlank()) {
+            log.warn("No cron expression provided for recurring job - using 1 hour default");
+            return Instant.now().plus(Duration.ofHours(1));
+        }
+
+        try {
+            // Parse cron expression using Spring's CronExpression
+            org.springframework.scheduling.support.CronExpression cron =
+                org.springframework.scheduling.support.CronExpression.parse(cronExpression);
+
+            // Calculate next occurrence from current time
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            java.time.LocalDateTime next = cron.next(now);
+
+            if (next == null) {
+                log.warn("Cron expression '{}' has no future occurrences - using 1 hour default",
+                    cronExpression);
+                return Instant.now().plus(Duration.ofHours(1));
+            }
+
+            // Convert to Instant using system default timezone
+            Instant nextRunTime = next.atZone(java.time.ZoneId.systemDefault()).toInstant();
+
+            log.debug("Calculated next run time from cron expression '{}': {}",
+                cronExpression, nextRunTime);
+
+            return nextRunTime;
+
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid cron expression '{}': {} - using 1 hour default",
+                cronExpression, e.getMessage());
+            return Instant.now().plus(Duration.ofHours(1));
+        }
+    }
+
 }
 

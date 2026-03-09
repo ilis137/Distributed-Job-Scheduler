@@ -2,6 +2,8 @@ package com.scheduler.repository;
 
 import com.scheduler.domain.entity.Job;
 import com.scheduler.domain.enums.JobStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -38,11 +40,20 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     
     /**
      * Finds all jobs with the given status.
-     * 
+     *
      * @param status the job status
      * @return list of jobs with the given status
      */
     List<Job> findByStatus(JobStatus status);
+
+    /**
+     * Finds all jobs with the given status (paginated).
+     *
+     * @param status the job status
+     * @param pageable pagination parameters
+     * @return page of jobs with the given status
+     */
+    Page<Job> findByStatus(JobStatus status, Pageable pageable);
     
     /**
      * Finds jobs that are due for execution.

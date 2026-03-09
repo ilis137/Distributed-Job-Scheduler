@@ -9,6 +9,8 @@ import com.scheduler.domain.enums.ExecutionStatus;
 import com.scheduler.repository.JobExecutionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -184,6 +186,17 @@ public class JobExecutionService {
     }
 
     /**
+     * Finds all executions.
+     *
+     * @param pageable pagination parameters
+     * @return page of executions
+     */
+    @Transactional(readOnly = true)
+    public Page<JobExecution> findAll(Pageable pageable) {
+        return executionRepository.findAll(pageable);
+    }
+
+    /**
      * Finds all executions for a job.
      *
      * @param jobId the job ID
@@ -192,6 +205,18 @@ public class JobExecutionService {
     @Transactional(readOnly = true)
     public List<JobExecution> findByJobId(Long jobId) {
         return executionRepository.findByJobId(jobId);
+    }
+
+    /**
+     * Finds all executions for a job (paginated).
+     *
+     * @param jobId the job ID
+     * @param pageable pagination parameters
+     * @return page of executions
+     */
+    @Transactional(readOnly = true)
+    public Page<JobExecution> findByJobId(Long jobId, Pageable pageable) {
+        return executionRepository.findByJobId(jobId, pageable);
     }
 
     /**
@@ -214,6 +239,18 @@ public class JobExecutionService {
     @Transactional(readOnly = true)
     public List<JobExecution> findByStatus(ExecutionStatus status) {
         return executionRepository.findByStatus(status);
+    }
+
+    /**
+     * Finds executions by status (paginated).
+     *
+     * @param status the execution status
+     * @param pageable pagination parameters
+     * @return page of executions
+     */
+    @Transactional(readOnly = true)
+    public Page<JobExecution> findByStatus(ExecutionStatus status, Pageable pageable) {
+        return executionRepository.findByStatus(status, pageable);
     }
 
     /**

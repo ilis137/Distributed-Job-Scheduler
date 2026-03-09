@@ -1,9 +1,9 @@
 # Distributed Job Scheduler - Development Progress Tracker
 
 **Project Start Date**: 2026-03-07
-**Last Updated**: 2026-03-08
+**Last Updated**: 2026-03-09
 **Current Phase**: Phase 1 - Core Infrastructure
-**Status**: 🚧 IN PROGRESS
+**Status**: ✅ COMPLETE
 
 ---
 
@@ -93,7 +93,7 @@ A highly available, fault-tolerant distributed job scheduling system demonstrati
 | Basic Configuration | ✅ COMPLETE | [docs/YAML_DUPLICATE_KEY_FIX.md](./docs/YAML_DUPLICATE_KEY_FIX.md) | `src/main/resources/` | 2026-03-07 |
 | Coordination Layer (Week 2) | ✅ COMPLETE | [docs/WEEK2_COORDINATION_LAYER.md](./docs/WEEK2_COORDINATION_LAYER.md) | `src/main/java/com/scheduler/coordination/` | 2026-03-07 |
 | Execution Layer (Week 3) | ✅ COMPLETE | [docs/WEEK3_EXECUTION_LAYER.md](./docs/WEEK3_EXECUTION_LAYER.md) | `src/main/java/com/scheduler/executor/`, `src/main/java/com/scheduler/service/` | 2026-03-08 |
-| REST API Controllers | ⏸️ TODO | [docs/features/REST_API.md](./docs/features/REST_API.md) | `src/main/java/com/scheduler/controller/` | - |
+| REST API Layer (Week 4) | ✅ COMPLETE | [docs/WEEK4_REST_API_LAYER.md](./docs/WEEK4_REST_API_LAYER.md) | `src/main/java/com/scheduler/controller/`, `src/main/java/com/scheduler/dto/` | 2026-03-09 |
 
 ### Phase 2: Leader Election & Failover
 
@@ -522,6 +522,25 @@ Establish the core infrastructure with database schema, domain entities, and bas
 - ✅ Implemented leader-only job polling in `JobScheduler`
 - ✅ Implemented fencing token validation to prevent stale/zombie executions
 - ✅ Build Status: `mvn clean compile` - SUCCESS (30 source files compiled)
+
+### 2026-03-09: Week 4 REST API Layer Complete
+
+**REST API Implementation:**
+- ✅ Implemented all DTOs using Java 21 Records (CreateJobRequest, UpdateJobRequest, JobResponse, etc.)
+- ✅ Implemented `JobController` with full CRUD operations and job lifecycle management
+- ✅ Implemented `JobExecutionController` for execution history queries
+- ✅ Implemented `ClusterController` for cluster status and monitoring
+- ✅ Implemented `GlobalExceptionHandler` with standardized error responses
+- ✅ Implemented `DtoMapper` for entity-to-DTO conversion
+- ✅ Build Status: `mvn clean compile` - SUCCESS (46 source files compiled)
+
+**Key Features:**
+- RESTful API design with proper HTTP verbs and status codes
+- Comprehensive Bean Validation with field-level error messages
+- Pagination support for scalability
+- Partial updates (PATCH semantics) for job updates
+- Centralized exception handling with consistent error format
+- Stateless design for horizontal scaling
 
 **Critical Bug Fix - RETRYING Jobs Never Re-Executed:**
 - **Problem**: Jobs in `RETRYING` status were stuck forever because `JobRepository.findDueJobs()` only queried for `status = 'PENDING'`

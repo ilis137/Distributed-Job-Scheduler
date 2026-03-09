@@ -2,6 +2,8 @@ package com.scheduler.repository;
 
 import com.scheduler.domain.entity.JobExecution;
 import com.scheduler.domain.enums.ExecutionStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,12 +26,22 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, Long
     
     /**
      * Finds all executions for a specific job, ordered by creation time.
-     * 
+     *
      * @param jobId the job ID
      * @return list of executions for the job
      */
     @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.createdAt DESC")
     List<JobExecution> findByJobId(@Param("jobId") Long jobId);
+
+    /**
+     * Finds all executions for a specific job (paginated).
+     *
+     * @param jobId the job ID
+     * @param pageable pagination parameters
+     * @return page of executions for the job
+     */
+    @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.startTime DESC")
+    Page<JobExecution> findByJobId(@Param("jobId") Long jobId, Pageable pageable);
     
     /**
      * Finds the most recent execution for a job.
@@ -69,11 +81,20 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, Long
     
     /**
      * Finds executions with a specific status.
-     * 
+     *
      * @param status the execution status
      * @return list of executions with the status
      */
     List<JobExecution> findByStatus(ExecutionStatus status);
+
+    /**
+     * Finds executions with a specific status (paginated).
+     *
+     * @param status the execution status
+     * @param pageable pagination parameters
+     * @return page of executions with the status
+     */
+    Page<JobExecution> findByStatus(ExecutionStatus status, Pageable pageable);
     
     /**
      * Finds failed executions within a time range.
