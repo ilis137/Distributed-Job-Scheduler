@@ -1,7 +1,7 @@
 # Distributed Job Scheduler - Development Progress Tracker
 
 **Project Start Date**: 2026-03-07
-**Last Updated**: 2026-03-09
+**Last Updated**: 2026-03-09 (Custom Bean Validation Implementation)
 **Current Phase**: Phase 1 - Core Infrastructure
 **Status**: ✅ COMPLETE
 
@@ -542,6 +542,36 @@ Establish the core infrastructure with database schema, domain entities, and bas
 - Centralized exception handling with consistent error format
 - Stateless design for horizontal scaling
 
+**Custom Bean Validation Implementation (2026-03-09):**
+- ✅ Created custom `@ValidCronExpression` annotation for cron expression validation
+- ✅ Implemented `CronExpressionValidator` using Spring's `CronExpression.parse()` for accuracy
+- ✅ Replaced brittle regex validation with robust parser-based validation
+- ✅ Updated `CreateJobRequest` and `UpdateJobRequest` to use custom validator
+- ✅ Build Status: `mvn clean compile` - SUCCESS (48 source files compiled)
+
+**Design Decisions:**
+- **Why custom validator over regex?**
+  - Cron expressions have complex rules difficult to express in regex
+  - Spring's `CronExpression.parse()` provides accurate validation
+  - Same parser used for validation and execution ensures consistency
+  - Better error messages with specific parsing failure details
+- **Why allow null/blank values?**
+  - Cron expressions are optional for one-time jobs
+  - Separation of concerns: `@NotBlank` handles required field validation
+  - Makes validator reusable for both required and optional fields
+- **Integration with JSR-380:**
+  - Seamless integration with Jakarta Bean Validation framework
+  - Works alongside other validators (`@NotBlank`, `@Size`, `@Pattern`)
+  - Global exception handling returns HTTP 400 with field-level errors
+
+**Files Created:**
+- `src/main/java/com/scheduler/validation/ValidCronExpression.java` - Custom annotation
+- `src/main/java/com/scheduler/validation/CronExpressionValidator.java` - Validator implementation
+
+**Files Modified:**
+- `src/main/java/com/scheduler/dto/CreateJobRequest.java` - Uses `@ValidCronExpression`
+- `src/main/java/com/scheduler/dto/UpdateJobRequest.java` - Uses `@ValidCronExpression`
+
 **Critical Bug Fix - RETRYING Jobs Never Re-Executed:**
 - **Problem**: Jobs in `RETRYING` status were stuck forever because `JobRepository.findDueJobs()` only queried for `status = 'PENDING'`
 - **Root Cause**: The polling query excluded RETRYING jobs, breaking the entire retry mechanism
@@ -633,7 +663,7 @@ For questions or issues during development, refer to:
 
 ---
 
-**Last Updated**: 2026-03-07 (Week 1 Complete - Flyway Migration & Schema Fixes)
+**Last Updated**: 2026-03-09 (Week 4 Complete - REST API Layer & Custom Bean Validation)
 **Updated By**: Development Team
 **Next Review**: After Phase 1 completion
 

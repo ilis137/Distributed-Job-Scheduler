@@ -1,8 +1,8 @@
 # Distributed Job Scheduler - Project Context & Memory
 
-**Last Updated**: 2026-03-08
-**Project Status**: Phase 1 - Week 3 Complete ✅
-**Next Phase**: Week 4 - REST API Layer
+**Last Updated**: 2026-03-09
+**Project Status**: Phase 1 - Week 4 Complete ✅
+**Next Phase**: Week 5 - Testing & Integration
 
 ---
 
@@ -16,9 +16,9 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 
 ---
 
-## Current Status (2026-03-08)
+## Current Status (2026-03-09)
 
-### ✅ Completed (Week 1 + Week 2 + Week 3)
+### ✅ Completed (Week 1 + Week 2 + Week 3 + Week 4)
 
 **Week 1: Domain + Database Layer:**
 - ✅ Project structure with Maven
@@ -48,6 +48,27 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - ✅ Complete retry flow: FAILED → RETRYING → SCHEDULED → RUNNING → COMPLETED
 - ✅ Orphaned job recovery: Detects and recovers jobs stuck in RUNNING status
 - ✅ Exception handling: `StaleExecutionException`, `JobExecutionException`, `InvalidJobStateException`
+
+**Week 4: REST API Layer:**
+- ✅ DTOs using Java 21 Records: `CreateJobRequest`, `UpdateJobRequest`, `JobResponse`, `JobListResponse`, `JobExecutionResponse`, `ExecutionHistoryResponse`, `ClusterStatusResponse`, `NodeStatusResponse`, `ErrorResponse`
+- ✅ `JobController` - Full CRUD operations, job lifecycle management (pause, resume, cancel, trigger)
+- ✅ `JobExecutionController` - Execution history queries with pagination
+- ✅ `ClusterController` - Cluster status, leader information, node health monitoring
+- ✅ `GlobalExceptionHandler` - Centralized exception handling with standardized error responses
+- ✅ `DtoMapper` - Entity-to-DTO conversion with proper field mapping
+- ✅ Bean Validation with field-level error messages
+- ✅ Pagination support for scalability
+- ✅ Partial updates (PATCH semantics) for job updates
+- ✅ Stateless design for horizontal scaling
+
+**Week 4 Enhancement: Custom Bean Validation (2026-03-09):**
+- ✅ `@ValidCronExpression` - Custom JSR-380 annotation for cron expression validation
+- ✅ `CronExpressionValidator` - Validator implementation using Spring's `CronExpression.parse()`
+- ✅ Replaced brittle regex validation with robust parser-based validation
+- ✅ Allows null/blank values (optional field for one-time jobs)
+- ✅ Custom error messages with specific parsing failure details
+- ✅ Consistent validation across `CreateJobRequest` and `UpdateJobRequest`
+- ✅ Seamless integration with Jakarta Bean Validation framework
 
 **Critical Bug Fixes & Features:**
 - ✅ **RETRYING Jobs Bug** (2026-03-08):
@@ -79,15 +100,20 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 
 ### 🚧 In Progress
 
-**None** - Ready to start Week 4 (REST API Layer)
+**None** - Ready to start Week 5 (Testing & Integration)
 
 ### ⏸️ Next Steps
 
-**Week 3: Execution Layer**
-- Implement `JobService` for job management
-- Implement `JobExecutionService` for execution tracking
-- Implement `JobExecutor` with virtual threads
-- Implement `RetryManager` for failed jobs
+**Week 5: Testing & Integration**
+- Write integration tests with Testcontainers
+- Write unit tests for critical components
+- Test distributed scenarios (leader failover, split-brain, etc.)
+- Load testing with concurrent job execution
+
+**Week 6: Frontend (Angular)**
+- Job management UI
+- Execution history dashboard
+- Cluster monitoring dashboard
 
 ---
 
@@ -187,6 +213,37 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 | `repository/JobExecutionRepository.java` | Execution data access | ✅ Complete |
 | `repository/SchedulerNodeRepository.java` | Node data access | ✅ Complete |
 
+### Validation (Custom Bean Validation)
+| File | Purpose | Status |
+|------|---------|--------|
+| `validation/ValidCronExpression.java` | Custom JSR-380 annotation for cron validation | ✅ Complete (2026-03-09) |
+| `validation/CronExpressionValidator.java` | Validator using Spring's CronExpression.parse() | ✅ Complete (2026-03-09) |
+
+**Key Features:**
+- Uses Spring's `CronExpression.parse()` for accurate validation (same parser as execution logic)
+- Allows null/blank values (optional field for one-time jobs)
+- Custom error messages with specific parsing failure details
+- Seamless integration with Jakarta Bean Validation (JSR-380)
+- Used in `CreateJobRequest` and `UpdateJobRequest` DTOs
+
+**Interview Talking Points:**
+- **Q: "Why custom validator over regex?"**
+  - Cron expressions have complex rules difficult to express in regex
+  - Spring's parser provides accurate validation
+  - Same parser for validation and execution ensures consistency
+  - Better error messages with specific parsing failure details
+
+- **Q: "Why allow null/blank values?"**
+  - Cron expressions are optional for one-time jobs
+  - Separation of concerns: `@NotBlank` handles required field validation
+  - Makes validator reusable for both required and optional fields
+
+- **Q: "How does it integrate with the validation framework?"**
+  - Implements `ConstraintValidator<ValidCronExpression, String>`
+  - Spring Boot auto-configures Bean Validation - no manual wiring
+  - Works alongside other validators (`@NotBlank`, `@Size`, `@Pattern`)
+  - `GlobalExceptionHandler` catches validation errors and returns HTTP 400
+
 ---
 
 ## Documentation Index
@@ -285,6 +342,8 @@ mvn test -Dtest=JobRepositoryTest
 
 ## Interview Talking Points
 
+### Database & Schema Management
+
 **Q: "Why did you choose Flyway over Liquibase?"**
 - SQL is more readable and easier to review in version control
 - Industry standard for schema evolution
@@ -300,6 +359,38 @@ mvn test -Dtest=JobRepositoryTest
 - Hibernate focuses on ORM, not schema management
 - Clean separation of concerns
 - Prevents conflicts between tools
+
+### Custom Bean Validation (@ValidCronExpression)
+
+**Q: "Why create a custom validator instead of using regex?"**
+- **Accuracy**: Cron expressions have complex rules (field ranges, special characters, day-of-week names) that are difficult to express accurately in regex
+- **Consistency**: The validator uses Spring's `CronExpression.parse()` - the same parser used in `JobController` and `JobExecutor` - ensuring validation consistency
+- **Better Error Messages**: The validator can catch specific parsing errors and provide detailed feedback (e.g., "Invalid second value: 60")
+- **Maintainability**: If Spring updates their cron format, our validator automatically stays in sync
+
+**Q: "Why allow null/blank values in the validator?"**
+- **Optional Field**: Cron expressions are optional - jobs without them are one-time jobs that execute immediately
+- **Separation of Concerns**: Required field validation is handled by `@NotBlank` if needed - the cron validator only validates format
+- **Reusability**: This makes the validator reusable for both required and optional fields
+- **Fail Fast**: We only validate when a value is provided, following the "fail fast" principle
+
+**Q: "How does this integrate with the existing validation framework?"**
+- **Declarative**: Uses `@Constraint` annotation to register the validator
+- **Automatic**: Spring Boot auto-configures Bean Validation - no manual wiring needed
+- **Composable**: Works alongside other validators like `@NotBlank`, `@Size`, `@Pattern`
+- **Global Exception Handling**: `GlobalExceptionHandler` catches `MethodArgumentNotValidException` and returns HTTP 400 with field-level errors
+
+**Q: "What about performance?"**
+- Cron parsing is very fast (microseconds), so validating at the API boundary doesn't add significant overhead
+- The benefit of catching invalid expressions early - before they reach the database or scheduling logic - far outweighs the minimal performance cost
+- Validation only happens on create/update operations, not on every job execution
+
+**Q: "How does this improve the system?"**
+- **Fail Fast**: Invalid cron expressions are rejected at the API boundary, not during execution
+- **Better UX**: Clients get immediate, detailed feedback about what's wrong with their cron expression
+- **Data Integrity**: Prevents invalid schedules from being persisted to the database
+- **Consistency**: Same validation logic for create and update operations
+- **Maintainability**: Centralized validation logic - easy to update if requirements change
 
 ---
 
