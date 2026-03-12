@@ -12,25 +12,39 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Redis-based implementation of CoordinationService using Redisson.
- * 
+ *
  * This implementation uses Redis for distributed coordination primitives:
- * - Leader election via TTL-based locks
+ * - Leader election via explicit TTL-based locks (NOT watchdog)
  * - Distributed locking via Redlock algorithm
- * 
+ *
+ * Leader Election Strategy:
+ * - Uses explicit TTL (10 seconds) instead of Redisson's watchdog mechanism
+ * - Leader must renew the lock every heartbeat interval (3 seconds)
+ * - If leader crashes or is partitioned, lock expires after TTL
+ * - Followers can then compete for leadership
+ * - Renewal happens when TTL drops below 1/3 of original (< 3.3 seconds)
+ *
  * Interview Talking Points:
  * - "I use Redis (AP system) for coordination because availability is more important
  *   than strong consistency for job scheduling"
+ * - "I use explicit TTL-based leases instead of watchdog to enable automatic failover"
  * - "Fencing tokens provide safety even if Redis has split-brain scenarios"
  * - "Redis has lower latency than CP systems like Zookeeper"
- * - "TTL-based leases ensure automatic failover if leader crashes"
- * 
+ * - "TTL-based leases ensure automatic failover if leader crashes (10s max)"
+ *
  * Design Decision:
  * "I chose Redis over Zookeeper because:
  * 1. Simpler to operate and deploy
  * 2. Lower latency for lock operations
  * 3. Built-in TTL support for automatic lease expiry
- * 4. Fencing tokens compensate for weaker consistency guarantees"
- * 
+ * 4. Fencing tokens compensate for weaker consistency guarantees
+ *
+ * Why explicit TTL instead of watchdog:
+ * 1. Watchdog keeps locks indefinitely, preventing failover
+ * 2. Explicit TTL ensures locks expire if leader crashes
+ * 3. We control renewal timing via heartbeat intervals
+ * 4. Enables predictable failover time (1 TTL cycle = 10 seconds)"
+ *
  * @author Distributed Job Scheduler Team
  * @since 1.0.0
  */
@@ -50,17 +64,23 @@ public class RedisCoordinationService implements CoordinationService {
         RLock lock = redissonClient.getLock(lockKey);
 
         try {
-            // Try to acquire the lock with Redisson's watchdog mechanism
-            // Using -1 for leaseTime enables automatic lock renewal by the watchdog
-            // The watchdog renews the lock every (lockWatchdogTimeout / 3) milliseconds
-            // Default lockWatchdogTimeout is 30 seconds, so renewal happens every 10 seconds
-            boolean acquired = lock.tryLock(0, -1, TimeUnit.MILLISECONDS);
+            // Try to acquire the lock with explicit TTL (lease time)
+            // waitTime = 0: don't wait if lock is already held by another node
+            // leaseTime = ttl: lock expires after TTL if not renewed (enables automatic failover)
+            //
+            // IMPORTANT: We use explicit TTL instead of watchdog (-1) because:
+            // 1. Watchdog keeps the lock indefinitely, preventing failover
+            // 2. Explicit TTL ensures the lock expires if the leader crashes
+            // 3. Followers can compete for leadership after TTL expires
+            // 4. We manually renew the lock via renewLeadership() at heartbeat intervals
+            boolean acquired = lock.tryLock(0, ttl.toMillis(), TimeUnit.MILLISECONDS);
 
             if (acquired) {
-                log.info("Node {} acquired leadership with watchdog auto-renewal enabled", nodeId);
+                log.info("Node {} acquired leadership with TTL {}s (expires in {}ms)",
+                    nodeId, ttl.toSeconds(), ttl.toMillis());
                 return true;
             } else {
-                log.debug("Node {} failed to acquire leadership - another node is leader", nodeId);
+                log.debug("Node {} failed to acquire leadership - lock held by another node", nodeId);
                 return false;
             }
         } catch (InterruptedException e) {
@@ -79,20 +99,59 @@ public class RedisCoordinationService implements CoordinationService {
         RLock lock = redissonClient.getLock(lockKey);
 
         try {
-            // With watchdog enabled, the lock is automatically renewed
-            // We just need to verify that this node still holds the lock
-            // The watchdog renews the lock in the background every (lockWatchdogTimeout / 3) ms
-            if (lock.isHeldByCurrentThread()) {
-                // Lock is still held and watchdog is renewing it automatically
-                log.debug("Node {} leadership verified - watchdog auto-renewal active", nodeId);
-                return true;
-            } else {
-                // Lock was lost (either expired or released by another process)
-                log.warn("Node {} lost leadership - lock no longer held", nodeId);
+            // First, verify this thread still holds the lock
+            if (!lock.isHeldByCurrentThread()) {
+                log.warn("Node {} lost leadership - lock no longer held by this thread", nodeId);
                 return false;
             }
+
+            // Get remaining TTL to decide if renewal is needed
+            long remainingTimeMs = lock.remainTimeToLive();
+
+            if (remainingTimeMs <= 0) {
+                log.warn("Node {} lost leadership - lock expired (TTL: {}ms)", nodeId, remainingTimeMs);
+                return false;
+            }
+
+            // Configuration: Original TTL is 10 seconds (10000ms)
+            // We renew when TTL drops below 1/3 of original (< 3333ms)
+            // This ensures we renew before the lock expires
+            long originalTtlMs = 10000; // 10 seconds from application.yml
+            long renewalThresholdMs = originalTtlMs / 3;
+
+            if (remainingTimeMs < renewalThresholdMs) {
+                // TTL is low, need to renew
+                log.debug("Node {} renewing leadership (remaining TTL: {}ms < threshold: {}ms)",
+                    nodeId, remainingTimeMs, renewalThresholdMs);
+
+                // Unlock the current lock
+                lock.unlock();
+
+                // Immediately re-acquire with fresh TTL
+                boolean reacquired = lock.tryLock(0, originalTtlMs, TimeUnit.MILLISECONDS);
+
+                if (reacquired) {
+                    log.info("Node {} successfully renewed leadership (new TTL: {}ms)",
+                        nodeId, originalTtlMs);
+                    return true;
+                } else {
+                    log.error("Node {} FAILED to renew leadership - another node acquired the lock!",
+                        nodeId);
+                    return false;
+                }
+            }
+
+            // TTL is still healthy (> 1/3 of original), no need to renew yet
+            log.debug("Node {} leadership verified (remaining TTL: {}ms, threshold: {}ms)",
+                nodeId, remainingTimeMs, renewalThresholdMs);
+            return true;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while renewing leadership for node {}", nodeId, e);
+            return false;
         } catch (Exception e) {
-            log.error("Error verifying leadership for node {}", nodeId, e);
+            log.error("Error renewing leadership for node {}", nodeId, e);
             return false;
         }
     }
