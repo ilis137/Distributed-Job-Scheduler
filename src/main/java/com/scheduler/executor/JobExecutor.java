@@ -11,7 +11,6 @@ import com.scheduler.exception.JobExecutionException;
 import com.scheduler.exception.StaleExecutionException;
 import com.scheduler.service.JobExecutionService;
 import com.scheduler.service.JobService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -47,7 +46,6 @@ import java.util.concurrent.TimeUnit;
  * @since 1.0.0
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class JobExecutor {
 
@@ -56,9 +54,37 @@ public class JobExecutor {
     private final DistributedLockService lockService;
     private final LeaderElectionService leaderElectionService;
     private final RetryManager retryManager;
-
-    @Qualifier("jobExecutorService")
     private final ExecutorService executorService;
+
+    /**
+     * Constructor with dependency injection.
+     *
+     * Note: @Qualifier annotation must be on the constructor parameter, not the field,
+     * when using constructor-based injection. This is why we use an explicit constructor
+     * instead of Lombok's @RequiredArgsConstructor.
+     *
+     * @param jobService the job service
+     * @param executionService the job execution service
+     * @param lockService the distributed lock service
+     * @param leaderElectionService the leader election service
+     * @param retryManager the retry manager
+     * @param executorService the executor service for job execution (virtual threads)
+     */
+    public JobExecutor(
+        JobService jobService,
+        JobExecutionService executionService,
+        DistributedLockService lockService,
+        LeaderElectionService leaderElectionService,
+        RetryManager retryManager,
+        @Qualifier("jobExecutorService") ExecutorService executorService
+    ) {
+        this.jobService = jobService;
+        this.executionService = executionService;
+        this.lockService = lockService;
+        this.leaderElectionService = leaderElectionService;
+        this.retryManager = retryManager;
+        this.executorService = executorService;
+    }
 
     /**
      * Executes a job asynchronously in a virtual thread.

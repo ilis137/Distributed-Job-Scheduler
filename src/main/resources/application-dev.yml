@@ -2,10 +2,12 @@
 
 spring:
   # Database Configuration
+  # Uses environment variables for Docker compatibility
+  # Defaults to localhost for local development
   datasource:
-    url: jdbc:mysql://localhost:3305/scheduler_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root
+    url: ${DB_URL:jdbc:mysql://localhost:3306/scheduler_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -32,10 +34,12 @@ spring:
     clean-disabled: false  # Allow clean in dev for testing
 
   # Redis Configuration (Redisson)
+  # Uses environment variables for Docker compatibility
+  # Defaults to localhost for local development
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       timeout: 2000ms
       lettuce:
         pool:

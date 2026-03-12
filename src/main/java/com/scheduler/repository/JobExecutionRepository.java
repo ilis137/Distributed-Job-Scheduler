@@ -40,7 +40,7 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, Long
      * @param pageable pagination parameters
      * @return page of executions for the job
      */
-    @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.startTime DESC")
+    @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.createdAt DESC")
     Page<JobExecution> findByJobId(@Param("jobId") Long jobId, Pageable pageable);
     
     /**
