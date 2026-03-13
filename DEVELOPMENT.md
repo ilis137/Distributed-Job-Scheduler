@@ -1,7 +1,7 @@
 # Distributed Job Scheduler - Development Progress Tracker
 
 **Project Start Date**: 2026-03-07
-**Last Updated**: 2026-03-09 (Custom Bean Validation Implementation)
+**Last Updated**: 2026-03-13 (LazyInitializationException & UnknownPathException Fixes)
 **Current Phase**: Phase 1 - Core Infrastructure
 **Status**: ✅ COMPLETE
 
@@ -606,6 +606,89 @@ Establish the core infrastructure with database schema, domain entities, and bas
 
 **Completed**: Week 3 - Execution Layer (job execution, retry logic, fencing validation, orphaned job recovery) - 2026-03-08
 
+### 2026-03-13: JPA/Hibernate Bug Fixes - LazyInitializationException & UnknownPathException
+
+**LazyInitializationException Fix:**
+- **Problem**: `GET /api/v1/executions/{id}` endpoint threw `LazyInitializationException` when `DtoMapper.toJobExecutionResponse()` tried to access `job.getName()` on a lazy-loaded proxy
+- **Root Cause**: The `JobExecution` entity has a `@ManyToOne(fetch = FetchType.LAZY)` relationship to `Job`. When the service method returned, the Hibernate session closed. The DTO mapper then tried to access `job.getName()` outside the transaction, triggering a lazy load that failed.
+- **Solution**: Implemented `@EntityGraph(attributePaths = {"job"})` on repository methods to eagerly fetch the Job association when needed for API responses
+- **Why This Approach?**
+  - **Better than `open-in-view=true`**: Keeps database connections open for entire HTTP request - anti-pattern in distributed systems, causes connection pool exhaustion under load
+  - **Better than `@Transactional` on controller**: Violates separation of concerns, keeps session open longer than necessary
+  - **Better than `JOIN FETCH` in every query**: Repetitive code, hard to maintain
+  - **`@EntityGraph` advantages**: Clean, declarative, single JOIN query (no N+1), maintains lazy loading as default for other use cases
+- **Files Modified**:
+  - `src/main/java/com/scheduler/repository/JobExecutionRepository.java`:
+    - Added `findWithJobById(Long id)` method with `@EntityGraph(attributePaths = {"job"})`
+    - Added `@EntityGraph` to `findAll(Pageable)`, `findByJobId()`, `findByStatus()` methods
+    - Added comprehensive JavaDoc explaining the design decision
+  - `src/main/java/com/scheduler/service/JobExecutionService.java`:
+    - Added `findByIdWithJob(Long executionId)` method that uses the new repository method
+    - Kept original `findById()` for internal use cases that don't need job details
+  - `src/main/java/com/scheduler/controller/JobExecutionController.java`:
+    - Changed `getExecution()` method to use `findByIdWithJob()` instead of `findById()`
+    - Added interview talking point explaining the fix
+- **Impact**:
+  - ✅ Fixed `LazyInitializationException` on all execution endpoints
+  - ✅ Single JOIN query instead of N+1 queries (performance improvement)
+  - ✅ Maintains `open-in-view=false` (important for distributed systems)
+  - ✅ Preserves lazy loading as default for other use cases
+
+**UnknownPathException Fix:**
+- **Problem**: `GET /api/v1/executions/job/{jobId}` and `GET /api/v1/executions` endpoints threw `org.hibernate.query.sqm.UnknownPathException: Could not resolve attribute 'startTime' of 'JobExecution'`
+- **Root Cause**: Naming mismatch between entity fields and DTO fields
+  - **Entity fields**: `startedAt`, `completedAt` (matches database schema: `started_at`, `completed_at`)
+  - **DTO fields**: `startTime`, `endTime` (better API naming for consumers)
+  - **Controller sort parameter**: `@PageableDefault(sort = "startTime")` incorrectly referenced the DTO field name
+  - **Spring Data JPA requirement**: Pageable sort parameters must reference **entity field names**, not DTO field names
+- **Solution**: Changed `@PageableDefault(sort = "startTime")` to `@PageableDefault(sort = "startedAt")` in both controller methods
+- **Why Different Naming?**
+  - **DTO naming**: Optimized for API consumers (`startTime`, `endTime` are more intuitive)
+  - **Entity naming**: Matches database schema and Java conventions (`startedAt`, `completedAt`)
+  - **Mapper handles translation**: `DtoMapper` converts between entity and DTO field names
+  - **This is acceptable**: Different naming conventions for different layers is a common pattern when properly documented
+- **Files Modified**:
+  - `src/main/java/com/scheduler/controller/JobExecutionController.java`:
+    - Line 82: Changed `@PageableDefault(sort = "startTime")` to `@PageableDefault(sort = "startedAt")` in `getJobExecutionHistory()`
+    - Line 110: Changed `@PageableDefault(sort = "startTime")` to `@PageableDefault(sort = "startedAt")` in `listExecutions()`
+    - Added interview talking points explaining why entity field names differ from DTO field names
+- **Impact**:
+  - ✅ Fixed `UnknownPathException` on execution history endpoints
+  - ✅ Proper sorting by execution start time
+  - ✅ Maintains clean API naming conventions in DTOs
+
+**Prevention Strategies:**
+- **Enable query validation in tests**: Add `spring.jpa.properties.hibernate.query.validate=true` to `application-test.yml`
+- **Write integration tests**: Test repository methods and controller endpoints with pagination
+- **Document field name mappings**: Create mapping table showing entity fields vs DTO fields vs database columns
+- **Use constants for sort fields**: Create `JobExecutionSortFields` class with constants to avoid typos
+
+**Key Learnings:**
+- `@EntityGraph` is the cleanest solution for preventing `LazyInitializationException` in distributed systems with `open-in-view=false`
+- Spring Data JPA Pageable sort parameters must reference entity field names, not DTO field names
+- Different naming conventions for entities vs DTOs is acceptable when properly documented and mapped
+- The DTO mapper is the single source of truth for field name translation between layers
+
+**Interview Talking Points:**
+
+**Q: "Why did the LazyInitializationException occur?"**
+- "The `JobExecution` entity has a lazy-loaded `@ManyToOne` relationship to `Job`. When the service method returned, the Hibernate session closed. Then the DTO mapper tried to access `job.getName()` outside the transaction, triggering a lazy load that failed because there was no active session."
+
+**Q: "Why not use `open-in-view=true`?"**
+- "I keep `open-in-view=false` because it's an anti-pattern in distributed systems. It keeps database connections open for the entire HTTP request, which wastes resources and can cause connection pool exhaustion under load. In a distributed job scheduler with high concurrency, this would be a serious performance bottleneck."
+
+**Q: "Why use `@EntityGraph` instead of `@Transactional` on the controller?"**
+- "I use `@EntityGraph` because it's a cleaner, repository-layer solution. Putting `@Transactional` on the controller violates separation of concerns and keeps the database session open longer than necessary. `@EntityGraph` fetches the association in a single JOIN query within the service transaction, then closes the session immediately."
+
+**Q: "How does `@EntityGraph` prevent N+1 queries?"**
+- "Without `@EntityGraph`, Hibernate would execute one query to fetch the `JobExecution`, then N additional queries to fetch the `Job` for each execution (N+1 problem). With `@EntityGraph`, Hibernate generates a single query with a LEFT JOIN, fetching both the execution and the job in one round trip to the database."
+
+**Q: "Why do the DTO and entity have different field names?"**
+- "I use different naming conventions for DTOs and entities to optimize for their different purposes. The DTO uses `startTime` and `endTime` because that's more intuitive for API consumers. The entity uses `startedAt` and `completedAt` to match the database schema and Java naming conventions. The mapper handles the translation between them."
+
+**Q: "Why did the UnknownPathException occur?"**
+- "The error occurred because Spring Data JPA's `@PageableDefault` sort parameter must reference the **entity field name**, not the DTO field name. Our DTO uses `startTime` for better API naming, but the entity field is `startedAt`. When the controller tried to sort by `startTime`, Hibernate couldn't find that field in the `JobExecution` entity."
+
 ### Future Decisions to Make
 - [ ] Choose between H2 and MySQL for integration tests (leaning towards Testcontainers with MySQL)
 - [ ] Decide on OpenTelemetry integration timeline (Phase 4 or later)
@@ -663,7 +746,7 @@ For questions or issues during development, refer to:
 
 ---
 
-**Last Updated**: 2026-03-09 (Week 4 Complete - REST API Layer & Custom Bean Validation)
+**Last Updated**: 2026-03-13 (JPA/Hibernate Bug Fixes - LazyInitializationException & UnknownPathException)
 **Updated By**: Development Team
 **Next Review**: After Phase 1 completion
 

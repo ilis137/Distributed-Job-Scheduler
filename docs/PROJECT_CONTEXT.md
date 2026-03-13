@@ -1,7 +1,7 @@
 # Distributed Job Scheduler - Project Context & Memory
 
-**Last Updated**: 2026-03-09
-**Project Status**: Phase 1 - Week 4 Complete ✅
+**Last Updated**: 2026-03-13
+**Project Status**: Phase 1 - Week 4 Complete ✅ + Bug Fixes
 **Next Phase**: Week 5 - Testing & Integration
 
 ---
@@ -16,9 +16,9 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 
 ---
 
-## Current Status (2026-03-09)
+## Current Status (2026-03-13)
 
-### ✅ Completed (Week 1 + Week 2 + Week 3 + Week 4)
+### ✅ Completed (Week 1 + Week 2 + Week 3 + Week 4 + Bug Fixes)
 
 **Week 1: Domain + Database Layer:**
 - ✅ Project structure with Maven
@@ -98,6 +98,22 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - ✅ Fixed leader election lock renewal bug (enabled Redisson watchdog)
 - ✅ Fixed lock expiration race condition (fencing token validation)
 
+**Recent Bug Fixes (2026-03-13):**
+- ✅ **LazyInitializationException Fix**:
+  - **Problem**: `GET /api/v1/executions/{id}` threw `LazyInitializationException` when DTO mapper accessed lazy-loaded Job association outside transaction
+  - **Solution**: Implemented `@EntityGraph(attributePaths = {"job"})` on repository methods to eagerly fetch Job when needed for API responses
+  - **Impact**: Fixed exception, single JOIN query (no N+1), maintains `open-in-view=false`, preserves lazy loading default
+  - **Files**: `JobExecutionRepository.java`, `JobExecutionService.java`, `JobExecutionController.java`
+  - **Documentation**: `docs/RECENT_FIXES.md`
+
+- ✅ **UnknownPathException Fix**:
+  - **Problem**: `GET /api/v1/executions/job/{jobId}` threw `UnknownPathException` because controller used DTO field name (`startTime`) instead of entity field name (`startedAt`) in `@PageableDefault`
+  - **Root Cause**: Naming mismatch - entity uses `startedAt`/`completedAt`, DTO uses `startTime`/`endTime` for better API naming
+  - **Solution**: Changed `@PageableDefault(sort = "startTime")` to `@PageableDefault(sort = "startedAt")` in controller
+  - **Impact**: Fixed exception, proper sorting, maintains clean API naming conventions
+  - **Files**: `JobExecutionController.java`
+  - **Documentation**: `docs/RECENT_FIXES.md`
+
 ### 🚧 In Progress
 
 **None** - Ready to start Week 5 (Testing & Integration)
@@ -175,6 +191,38 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - `@Version` annotation on all entities
 - Prevents concurrent modification conflicts
 - Database-level concurrency control
+
+### JPA/Hibernate Best Practices (2026-03-13)
+
+**1. LazyInitializationException Prevention**
+- ✅ **Decision**: Use `@EntityGraph` for API endpoints that need to return nested associations
+- **Rationale**:
+  - Maintains `open-in-view=false` (critical for distributed systems)
+  - Single JOIN query instead of N+1 queries (performance)
+  - Clean, declarative, repository-layer solution
+  - Preserves lazy loading as default for other use cases
+- **Alternative rejected**: `@Transactional` on controllers (violates separation of concerns)
+- **Alternative rejected**: `open-in-view=true` (anti-pattern, causes connection pool exhaustion)
+- **Applies to**: All repository methods that fetch entities for API responses
+
+**2. Spring Data JPA Sorting**
+- ✅ **Decision**: `@PageableDefault` sort parameters must reference **entity field names**, not DTO field names
+- **Rationale**:
+  - Spring Data JPA translates Pageable to JPQL queries using entity field names
+  - Hibernate cannot resolve DTO field names (they don't exist in the entity)
+  - Different naming conventions across layers is acceptable when properly documented
+- **Example**: Use `sort = "startedAt"` (entity field), not `sort = "startTime"` (DTO field)
+- **Prevention**: Document field name mappings, use constants for sort fields, enable query validation in tests
+
+**3. Naming Conventions Across Layers**
+- ✅ **Decision**: Allow different naming conventions for database, entity, and DTO layers
+- **Rationale**:
+  - **Database**: `snake_case` (e.g., `started_at`, `completed_at`) - SQL convention
+  - **Entity**: `camelCase` matching database (e.g., `startedAt`, `completedAt`) - Java convention
+  - **DTO**: `camelCase` optimized for API (e.g., `startTime`, `endTime`) - API consumer clarity
+  - **Mapper**: Single source of truth for field name translation
+- **Benefit**: Each layer optimized for its purpose, clean separation of concerns
+- **Requirement**: Comprehensive documentation of field name mappings
 
 ---
 
@@ -259,6 +307,11 @@ A **distributed job scheduling system** built with Java 21 and Spring Boot 3.2.3
 - **`docs/FLYWAY_MIGRATION_SUMMARY.md`** - Flyway migration guide
 - **`docs/HIBERNATE_ENUM_VALIDATION_FIX.md`** - Hibernate validation fix
 - **`docs/YAML_DUPLICATE_KEY_FIX.md`** - YAML configuration fix
+
+### Bug Fix Documentation
+- **`docs/RECENT_FIXES.md`** - LazyInitializationException & UnknownPathException fixes (2026-03-13)
+- **`docs/RETRYING_JOBS_BUG_FIX.md`** - RETRYING jobs bug fix (2026-03-08)
+- **`docs/ORPHANED_JOB_RECOVERY.md`** - Orphaned job recovery implementation (2026-03-08)
 
 ### Architecture Documentation
 - **`docs/ARCHITECTURE_REVIEW.md`** - Rationale for simplified architecture
@@ -391,6 +444,50 @@ mvn test -Dtest=JobRepositoryTest
 - **Data Integrity**: Prevents invalid schedules from being persisted to the database
 - **Consistency**: Same validation logic for create and update operations
 - **Maintainability**: Centralized validation logic - easy to update if requirements change
+
+### JPA/Hibernate (@EntityGraph & Lazy Loading)
+
+**Q: "Why did the LazyInitializationException occur?"**
+- "The `JobExecution` entity has a lazy-loaded `@ManyToOne` relationship to `Job`. When the service method returned, the Hibernate session closed. Then the DTO mapper tried to access `job.getName()` outside the transaction, triggering a lazy load that failed because there was no active session."
+
+**Q: "Why not use `open-in-view=true`?"**
+- "I keep `open-in-view=false` because it's an anti-pattern in distributed systems. It keeps database connections open for the entire HTTP request, which wastes resources and can cause connection pool exhaustion under load. In a distributed job scheduler with high concurrency, this would be a serious performance bottleneck."
+
+**Q: "Why use `@EntityGraph` instead of `@Transactional` on the controller?"**
+- "I use `@EntityGraph` because it's a cleaner, repository-layer solution. Putting `@Transactional` on the controller violates separation of concerns and keeps the database session open longer than necessary. `@EntityGraph` fetches the association in a single JOIN query within the service transaction, then closes the session immediately."
+
+**Q: "How does `@EntityGraph` prevent N+1 queries?"**
+- "Without `@EntityGraph`, Hibernate would execute one query to fetch the `JobExecution`, then N additional queries to fetch the `Job` for each execution (N+1 problem). With `@EntityGraph`, Hibernate generates a single query with a LEFT JOIN, fetching both the execution and the job in one round trip to the database."
+
+**Q: "Why did the UnknownPathException occur?"**
+- "The error occurred because Spring Data JPA's `@PageableDefault` sort parameter must reference the **entity field name**, not the DTO field name. Our DTO uses `startTime` for better API naming, but the entity field is `startedAt`. When the controller tried to sort by `startTime`, Hibernate couldn't find that field in the `JobExecution` entity."
+
+**Q: "Why do the DTO and entity have different field names?"**
+- "I use different naming conventions for DTOs and entities to optimize for their different purposes. The DTO uses `startTime` and `endTime` because that's more intuitive for API consumers. The entity uses `startedAt` and `completedAt` to match the database schema and Java naming conventions. The mapper handles the translation between them."
+
+---
+
+## Lessons Learned
+
+### 1. Always Keep `open-in-view=false` in Distributed Systems
+- **Why**: Prevents connection pool exhaustion under high concurrency
+- **Solution**: Use `@EntityGraph` to eagerly fetch associations when needed for API responses
+- **Benefit**: Clean separation of concerns, single JOIN query, maintains lazy loading default
+
+### 2. Spring Data JPA Sort Parameters Must Use Entity Field Names
+- **Why**: Hibernate translates Pageable to JPQL using entity field names
+- **Solution**: Document field name mappings, use constants for sort fields
+- **Benefit**: Prevents `UnknownPathException`, maintains clean API naming
+
+### 3. Different Naming Conventions Across Layers is Acceptable
+- **Why**: Each layer optimized for its purpose (database, entity, DTO)
+- **Solution**: Comprehensive documentation, mapper as single source of truth
+- **Benefit**: Clean separation of concerns, better API design
+
+### 4. Enable Query Validation in Tests
+- **Why**: Catches JPQL errors at startup instead of runtime
+- **Solution**: Add `spring.jpa.properties.hibernate.query.validate=true` to test config
+- **Benefit**: Fail fast, easier debugging
 
 ---
 
