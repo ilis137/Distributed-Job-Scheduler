@@ -186,6 +186,30 @@ public class JobExecutionService {
     }
 
     /**
+     * Finds an execution by ID with the Job association eagerly fetched.
+     *
+     * This method is used by API endpoints that need to return job details
+     * in the execution response. It uses @EntityGraph in the repository to
+     * fetch the Job association in a single query, preventing LazyInitializationException.
+     *
+     * Interview Talking Point:
+     * "I have a separate method for fetching executions with job details to avoid
+     * the LazyInitializationException. This eagerly fetches the Job association using
+     * @EntityGraph, which generates a single JOIN query instead of N+1 queries. The
+     * default findById() still uses lazy loading for internal use cases where job
+     * details aren't needed."
+     *
+     * @param executionId the execution ID
+     * @return the execution with job association loaded
+     * @throws IllegalArgumentException if execution doesn't exist
+     */
+    @Transactional(readOnly = true)
+    public JobExecution findByIdWithJob(Long executionId) {
+        return executionRepository.findWithJobById(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("Execution not found: " + executionId));
+    }
+
+    /**
      * Finds all executions.
      *
      * @param pageable pagination parameters

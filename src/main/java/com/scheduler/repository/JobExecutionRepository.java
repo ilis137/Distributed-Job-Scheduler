@@ -4,6 +4,7 @@ import com.scheduler.domain.entity.JobExecution;
 import com.scheduler.domain.enums.ExecutionStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,14 +16,52 @@ import java.util.Optional;
 
 /**
  * Repository for JobExecution entity.
- * 
+ *
  * Interview Talking Points:
  * - Tracks complete execution history for audit and debugging
  * - Supports fencing token validation
  * - Enables performance monitoring and failure analysis
+ * - Uses @EntityGraph to eagerly fetch Job association when needed for API responses
+ *
+ * Design Decision:
+ * "I use @EntityGraph to solve the LazyInitializationException when fetching executions
+ * for API responses. This eagerly fetches the Job association in a single JOIN query,
+ * avoiding N+1 queries while maintaining lazy loading as the default for other use cases.
+ * This is cleaner than using @Transactional on the controller or JOIN FETCH in every query."
  */
 @Repository
 public interface JobExecutionRepository extends JpaRepository<JobExecution, Long> {
+
+    /**
+     * Finds an execution by ID with the Job association eagerly fetched.
+     *
+     * This method is used by API endpoints that need to return job details
+     * in the execution response. The @EntityGraph annotation tells Hibernate
+     * to fetch the Job association in the same query, preventing LazyInitializationException.
+     *
+     * Interview Talking Point:
+     * "I use @EntityGraph to eagerly fetch the Job association when needed for API responses.
+     * This solves the LazyInitializationException without requiring open-in-view=true or
+     * @Transactional on the controller. The default findById() still uses lazy loading for
+     * other use cases where the job details aren't needed."
+     *
+     * @param id the execution ID
+     * @return Optional containing the execution with job eagerly loaded
+     */
+    @EntityGraph(attributePaths = {"job"})
+    Optional<JobExecution> findWithJobById(Long id);
+
+    /**
+     * Finds all executions (paginated) with Job eagerly fetched.
+     *
+     * Overrides the default findAll to eagerly fetch the Job association
+     * for API responses that list all executions.
+     *
+     * @param pageable pagination parameters
+     * @return page of executions with job association loaded
+     */
+    @EntityGraph(attributePaths = {"job"})
+    Page<JobExecution> findAll(Pageable pageable);
     
     /**
      * Finds all executions for a specific job, ordered by creation time.
@@ -30,16 +69,20 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, Long
      * @param jobId the job ID
      * @return list of executions for the job
      */
+    @EntityGraph(attributePaths = {"job"})
     @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.createdAt DESC")
     List<JobExecution> findByJobId(@Param("jobId") Long jobId);
 
     /**
-     * Finds all executions for a specific job (paginated).
+     * Finds all executions for a specific job (paginated) with Job eagerly fetched.
+     *
+     * Used by API endpoints that return execution history with job details.
      *
      * @param jobId the job ID
      * @param pageable pagination parameters
-     * @return page of executions for the job
+     * @return page of executions for the job with job association loaded
      */
+    @EntityGraph(attributePaths = {"job"})
     @Query("SELECT e FROM JobExecution e WHERE e.job.id = :jobId ORDER BY e.createdAt DESC")
     Page<JobExecution> findByJobId(@Param("jobId") Long jobId, Pageable pageable);
     
@@ -85,15 +128,19 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, Long
      * @param status the execution status
      * @return list of executions with the status
      */
+    @EntityGraph(attributePaths = {"job"})
     List<JobExecution> findByStatus(ExecutionStatus status);
 
     /**
-     * Finds executions with a specific status (paginated).
+     * Finds executions with a specific status (paginated) with Job eagerly fetched.
+     *
+     * Used by API endpoints that filter executions by status.
      *
      * @param status the execution status
      * @param pageable pagination parameters
-     * @return page of executions with the status
+     * @return page of executions with the status and job association loaded
      */
+    @EntityGraph(attributePaths = {"job"})
     Page<JobExecution> findByStatus(ExecutionStatus status, Pageable pageable);
     
     /**

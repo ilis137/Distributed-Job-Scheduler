@@ -43,28 +43,35 @@ public class JobExecutionController {
     
     /**
      * Gets execution details by ID.
-     * 
+     *
+     * Interview Talking Point:
+     * "I use findByIdWithJob() instead of findById() to eagerly fetch the Job association.
+     * This prevents LazyInitializationException when the DTO mapper accesses job.getName().
+     * The repository uses @EntityGraph to fetch the job in a single JOIN query, avoiding
+     * N+1 queries while maintaining lazy loading as the default for other use cases."
+     *
      * @param id Execution ID
      * @return 200 OK with execution details, or 404 Not Found
      */
     @GetMapping("/{id}")
     public ResponseEntity<JobExecutionResponse> getExecution(@PathVariable Long id) {
         log.debug("Fetching execution: id={}", id);
-        
-        JobExecution execution = jobExecutionService.findById(id);
+
+        JobExecution execution = jobExecutionService.findByIdWithJob(id);
         JobExecutionResponse response = DtoMapper.toJobExecutionResponse(execution);
-        
+
         return ResponseEntity.ok(response);
     }
     
     /**
      * Gets execution history for a specific job.
-     * 
+     *
      * Interview Talking Point:
      * "Job execution history shows all attempts, retries, and failures.
      * This is critical for debugging why a job keeps failing or for
-     * analyzing performance trends over time."
-     * 
+     * analyzing performance trends over time. I sort by startedAt (the entity
+     * field name) even though the DTO exposes it as startTime for better API naming."
+     *
      * @param jobId Job ID
      * @param pageable Pagination parameters
      * @return 200 OK with paginated execution history
@@ -72,25 +79,27 @@ public class JobExecutionController {
     @GetMapping("/job/{jobId}")
     public ResponseEntity<ExecutionHistoryResponse> getJobExecutionHistory(
             @PathVariable Long jobId,
-            @PageableDefault(size = 20, sort = "startTime", direction = Sort.Direction.DESC) Pageable pageable) {
-        
+            @PageableDefault(size = 20, sort = "startedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
         log.debug("Fetching execution history for job: jobId={}, page={}, size={}",
             jobId, pageable.getPageNumber(), pageable.getPageSize());
-        
+
         Page<JobExecution> page = jobExecutionService.findByJobId(jobId, pageable);
         ExecutionHistoryResponse response = DtoMapper.toExecutionHistoryResponse(page);
-        
+
         return ResponseEntity.ok(response);
     }
     
     /**
      * Lists all executions with optional filtering.
-     * 
+     *
      * Interview Talking Point:
      * "Global execution history allows operators to see all job activity
      * across the cluster. Filtering by status helps identify patterns like
-     * high failure rates or timeout issues."
-     * 
+     * high failure rates or timeout issues. I sort by startedAt (the entity
+     * field name) to match the database schema, even though the API exposes
+     * it as startTime for better naming conventions."
+     *
      * @param status Optional status filter
      * @param pageable Pagination parameters
      * @return 200 OK with paginated execution list
@@ -98,17 +107,17 @@ public class JobExecutionController {
     @GetMapping
     public ResponseEntity<ExecutionHistoryResponse> listExecutions(
             @RequestParam(required = false) ExecutionStatus status,
-            @PageableDefault(size = 20, sort = "startTime", direction = Sort.Direction.DESC) Pageable pageable) {
-        
+            @PageableDefault(size = 20, sort = "startedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
         log.debug("Listing executions: status={}, page={}, size={}",
             status, pageable.getPageNumber(), pageable.getPageSize());
-        
+
         Page<JobExecution> page = (status != null)
             ? jobExecutionService.findByStatus(status, pageable)
             : jobExecutionService.findAll(pageable);
-        
+
         ExecutionHistoryResponse response = DtoMapper.toExecutionHistoryResponse(page);
-        
+
         return ResponseEntity.ok(response);
     }
 }
