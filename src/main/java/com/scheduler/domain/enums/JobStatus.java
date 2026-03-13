@@ -2,17 +2,20 @@ package com.scheduler.domain.enums;
 
 /**
  * Represents the lifecycle states of a job in the distributed scheduler.
- * 
+ *
  * State Transitions:
  * PENDING → SCHEDULED → RUNNING → COMPLETED
- *                    ↓         ↓
+ *        ↖           ↓         ↓
+ *         ╰────────────────────╯ (recurring jobs)
  *                  FAILED ← RETRYING
  *                    ↓
  *              DEAD_LETTER
- * 
+ *
  * Interview Talking Point:
  * "I implemented a state machine with validation to ensure jobs can only
- * transition through valid states, preventing corruption from race conditions."
+ * transition through valid states, preventing corruption from race conditions.
+ * For recurring jobs, I allow RUNNING → PENDING transition to reschedule the
+ * job after successful execution, protected by fencing token validation."
  */
 public enum JobStatus {
     
@@ -66,11 +69,14 @@ public enum JobStatus {
     
     /**
      * Validates if a transition from this status to the target status is allowed.
-     * 
+     *
      * Interview Talking Point:
      * "This prevents invalid state transitions that could occur due to race conditions
-     * in a distributed system, such as marking a COMPLETED job as RUNNING."
-     * 
+     * in a distributed system, such as marking a COMPLETED job as RUNNING. For recurring
+     * jobs, I allow RUNNING → PENDING to reschedule after successful execution, but this
+     * is protected by fencing token validation to prevent zombie executions from corrupting
+     * the job state."
+     *
      * @param targetStatus the status to transition to
      * @return true if transition is valid, false otherwise
      */
@@ -78,11 +84,11 @@ public enum JobStatus {
         if (this == targetStatus) {
             return true; // Same state is always valid
         }
-        
+
         return switch (this) {
             case PENDING -> targetStatus == SCHEDULED || targetStatus == PAUSED;
             case SCHEDULED -> targetStatus == RUNNING || targetStatus == FAILED || targetStatus == PENDING;
-            case RUNNING -> targetStatus == COMPLETED || targetStatus == FAILED;
+            case RUNNING -> targetStatus == COMPLETED || targetStatus == FAILED || targetStatus == PENDING;
             case FAILED -> targetStatus == RETRYING || targetStatus == DEAD_LETTER;
             case RETRYING -> targetStatus == SCHEDULED || targetStatus == DEAD_LETTER;
             case COMPLETED -> targetStatus == PENDING; // For recurring jobs
