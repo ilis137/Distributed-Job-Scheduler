@@ -1,0 +1,97 @@
+<div class="job-detail-container" *ngIf="job">
+  <div class="header">
+    <h1>{{ job.name }}</h1>
+    <div class="actions">
+      <button mat-raised-button [routerLink]="['/jobs', job.id, 'edit']">
+        <mat-icon>edit</mat-icon> Edit
+      </button>
+      <button mat-raised-button color="primary" (click)="triggerJob()">
+        <mat-icon>play_arrow</mat-icon> Trigger Now
+      </button>
+      <button mat-raised-button color="warn" (click)="deleteJob()">
+        <mat-icon>delete</mat-icon> Delete
+      </button>
+    </div>
+  </div>
+
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Job Details</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <label>Status:</label>
+          <span class="status-badge" [ngClass]="'status-' + job.status.toLowerCase()">{{ job.status }}</span>
+        </div>
+        <div class="detail-item">
+          <label>Enabled:</label>
+          <span>{{ job.enabled ? 'Yes' : 'No' }}</span>
+        </div>
+        <div class="detail-item">
+          <label>Cron Expression:</label>
+          <code *ngIf="job.cronExpression">{{ job.cronExpression }}</code>
+          <span *ngIf="!job.cronExpression">One-time</span>
+        </div>
+        <div class="detail-item">
+          <label>Next Run:</label>
+          <span>{{ job.nextRunTime | date:'medium' }}</span>
+        </div>
+        <div class="detail-item">
+          <label>Max Retries:</label>
+          <span>{{ job.maxRetries }}</span>
+        </div>
+        <div class="detail-item">
+          <label>Timeout:</label>
+          <span>{{ job.timeoutSeconds }}s</span>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Execution History</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="executions" *ngIf="executions.length > 0">
+        <ng-container matColumnDef="id">
+          <th mat-header-cell *matHeaderCellDef>ID</th>
+          <td mat-cell *matCellDef="let exec">{{ exec.id }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let exec">
+            <span class="status-badge" [ngClass]="'status-' + exec.status.toLowerCase()">{{ exec.status }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="nodeId">
+          <th mat-header-cell *matHeaderCellDef>Node</th>
+          <td mat-cell *matCellDef="let exec">{{ exec.nodeId }}</td>
+        </ng-container>
+        <ng-container matColumnDef="startTime">
+          <th mat-header-cell *matHeaderCellDef>Start Time</th>
+          <td mat-cell *matCellDef="let exec">{{ exec.startTime | date:'short' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="endTime">
+          <th mat-header-cell *matHeaderCellDef>End Time</th>
+          <td mat-cell *matCellDef="let exec">{{ exec.endTime ? (exec.endTime | date:'short') : '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="retryAttempt">
+          <th mat-header-cell *matHeaderCellDef>Retry</th>
+          <td mat-cell *matCellDef="let exec">{{ exec.retryAttempt }}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+      <p *ngIf="executions.length === 0">No execution history available.</p>
+    </mat-card-content>
+  </mat-card>
+</div>
+
+<div *ngIf="loading" class="loading-container">
+  <mat-spinner></mat-spinner>
+</div>
+
+<div *ngIf="error" class="error-message">{{ error }}</div>
+

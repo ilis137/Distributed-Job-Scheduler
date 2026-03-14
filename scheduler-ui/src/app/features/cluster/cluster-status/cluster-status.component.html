@@ -1,0 +1,115 @@
+<div class="cluster-status-container">
+  <h1>Cluster Status</h1>
+
+  <div *ngIf="error" class="error-message">{{ error }}</div>
+
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner></mat-spinner>
+  </div>
+
+  <div *ngIf="!loading && clusterStatus" class="cluster-info">
+    <!-- Cluster Overview -->
+    <div class="overview-cards">
+      <mat-card>
+        <mat-card-content>
+          <div class="stat">
+            <mat-icon>dns</mat-icon>
+            <div>
+              <div class="stat-value">{{ clusterStatus.totalNodes }}</div>
+              <div class="stat-label">Total Nodes</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat">
+            <mat-icon class="active-icon">check_circle</mat-icon>
+            <div>
+              <div class="stat-value">{{ clusterStatus.healthyNodes }}</div>
+              <div class="stat-label">Healthy Nodes</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat">
+            <mat-icon class="leader-icon">star</mat-icon>
+            <div>
+              <div class="stat-value">{{ clusterStatus.leaderNodeId || 'None' }}</div>
+              <div class="stat-label">Leader Node</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat">
+            <mat-icon>work</mat-icon>
+            <div>
+              <div class="stat-value">{{ clusterStatus.totalJobs }}</div>
+              <div class="stat-label">Total Jobs</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Node Details Table -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Node Details</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <table mat-table [dataSource]="clusterStatus.nodes" class="nodes-table">
+          <ng-container matColumnDef="nodeId">
+            <th mat-header-cell *matHeaderCellDef>Node ID</th>
+            <td mat-cell *matCellDef="let node">{{ node.nodeId }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let node">
+              <mat-chip [ngClass]="node.healthy ? 'node-active' : 'node-inactive'">
+                {{ node.healthy ? 'HEALTHY' : 'UNHEALTHY' }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="isLeader">
+            <th mat-header-cell *matHeaderCellDef>Role</th>
+            <td mat-cell *matCellDef="let node">
+              <span *ngIf="node.role === 'LEADER'" class="node-leader">
+                <mat-icon>star</mat-icon> Leader
+              </span>
+              <span *ngIf="node.role === 'FOLLOWER'" class="node-follower">Follower</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="epoch">
+            <th mat-header-cell *matHeaderCellDef>Epoch</th>
+            <td mat-cell *matCellDef="let node">{{ node.epoch }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="lastHeartbeat">
+            <th mat-header-cell *matHeaderCellDef>Last Heartbeat</th>
+            <td mat-cell *matCellDef="let node">{{ node.lastHeartbeat | date:'short' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="uptime">
+            <th mat-header-cell *matHeaderCellDef>Start Time</th>
+            <td mat-cell *matCellDef="let node">{{ node.startTime | date:'short' }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
